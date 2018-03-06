@@ -107,3 +107,17 @@ int main(void)
     }
 }
 
+/*
+Timer 0: 8 bit
+Timer 1: 16 bit
+Timer 2: 8 bit
+
+Warning: Do not write to TNCT while it is running, it will remove compare match
+Also do not modify TNCT as you run the risk of missing a compare match
+
+Num clock cycles required to process an operation: time_per_op/(1/clock_speed)
+
+
+Time interval b/w each timer: (OCR_A + 1) * prescalar/clock_speed
+period = time inerval * 2
+*/
