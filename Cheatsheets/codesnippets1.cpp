@@ -107,6 +107,54 @@ int main(void)
     }
 }
 
+
+// ------------------------ Setting up PWM -----------------------------------
+/*
+    * Digital bits are encoded over a fixed period of time
+    * Analog values are encoded by the proportion of "1" time to "0" time within this fixed time
+    
+    freq of PWM = f(clk_I/O) / (N * 510)        where N is the prescalar factor, f(clk) is assumed to be 16mhz
+
+    eg. for 500Hz, we get N to be 62.74 --> Closest value of N is 64
+
+
+    The duty cycle is determined by the value stored in the OCR0A register
+    D = (0CR0A/255) * 100
+
+    
+*/
+
+void InitPWM()
+{
+    TCNT0 = 0; // To generate phase correct 
+    OCR0A = 0;
+    TCCR0A = 0b11000001; // This is to configure PWM phase correct mode rather than CTC mode
+    // Recall: CTC mode basically calls the interrupt only when it is == OCR0A (TOP) and then resets it. 
+
+    TIMSK0 |= 0b10;
+}
+
+void startPWM()
+{
+    TCCR0B = 0b00000011;
+    sei();
+}
+
+ISR(TIMER0_COMPA_vect)
+{
+    OCR0A = 25; // The duty cycle is determined by the value stored in the OCR0A register
+}
+int main(void)
+{
+    DDRD |= (1 << DDD6); 
+    InitPWM();
+    startPWM();
+
+    while (1)
+    {
+    }
+}
+
 /*
 Timer 0: 8 bit
 Timer 1: 16 bit
@@ -118,6 +166,6 @@ Also do not modify TNCT as you run the risk of missing a compare match
 Num clock cycles required to process an operation: time_per_op/(1/clock_speed)
 
 
-Time interval b/w each timer: (OCR_A + 1) * prescalar/clock_speed
+Time interval b/w each timer: (OCR_A + 1) * (prescalar/clock_speed)
 period = time inerval * 2
 */
