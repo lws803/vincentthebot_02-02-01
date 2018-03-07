@@ -39,6 +39,24 @@ int main(void)
 
 // ------------------------ Setting up Timer ---------------------------------
 
+/*
+    Timer 0: 8 bit
+    Timer 1: 16 bit
+    Timer 2: 8 bit
+
+    Warning: Do not write to TNCT while it is running, it will remove compare match
+    Also do not modify TNCT as you run the risk of missing a compare match
+
+    Num clock cycles required to process an operation: time_per_op/(1/clock_speed)
+
+
+    Time interval b/w each timer: (OCR_A + 1) * (prescalar/clock_speed)
+    period = time inerval * 2
+
+    choosing a good prescaler value: V that does not exceed 255 and does not have a decimal (hopefully)
+    
+*/
+
 // The turn variable decides whose turn it is to go now.
 volatile int turn=0;
 
@@ -154,18 +172,3 @@ int main(void)
     {
     }
 }
-
-/*
-Timer 0: 8 bit
-Timer 1: 16 bit
-Timer 2: 8 bit
-
-Warning: Do not write to TNCT while it is running, it will remove compare match
-Also do not modify TNCT as you run the risk of missing a compare match
-
-Num clock cycles required to process an operation: time_per_op/(1/clock_speed)
-
-
-Time interval b/w each timer: (OCR_A + 1) * (prescalar/clock_speed)
-period = time inerval * 2
-*/
