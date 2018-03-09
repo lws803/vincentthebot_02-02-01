@@ -50,3 +50,10 @@ $ git commit
 $ git push // Finally push the resolved conflicts back 
 
 
+
+// Note that you do not need to stage everything before commit if you do not wish to keep track of the file.
+
+
+
+
+

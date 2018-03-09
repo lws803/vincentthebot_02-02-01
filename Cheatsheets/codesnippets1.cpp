@@ -1,20 +1,56 @@
 // ------------------------ Turning on and off LED  ------------------------
+/*
+	General rule:
+	Set high = use |= ____1_____ 
+	Set low =  use &= ____0_____
+	For checking conditions: We usually use & operator 
 
+	Bit-shifting:
+	eg. x = 0xFA
+	x_high = (x & 0xF0) >> 4 // & to remove the lower byte 
+	x_low = (x & 0x0F) // & to remove the uppper byte
+*/
 void switchLED () {
     if (!turn) {
         PORTB &= 0b11101111;
     }else {
         // Switch LED at pin 12 on. Pin 12 is PB4
-        PORTB |= 0b00010000;
+        PORTB |= 0b00010000; // Assuming this is active high pin, where logic 1 will turn it ON
     }
 }
 
-// ------------------------ Setting up ISR for INT 0 ------------------------
+void toggleLED () {
+	PORTB ^= 0b00010000;
+}
 
+void conditions() {
+	// To check if an input pin is currently high or low
+	if (PORTB & 0b00100000)
+		// Pin is currently high 
+
+	if (!(PORTB & 0b00100000))
+		// Pin is currently low 
+}
+
+int main () {
+	DDRB |= 0b00001000; // Set pin to output 
+	DDRD &= 0b00100000; // Set pin to input, make sure we do this to set the pin to input mode
+
+	// Note: For output or input even if its active high or low, we do not care. We will still set this according to
+	// whether it is an input or output. 
+	switchLED();
+}
+
+// ------------------------ Setting up ISR for INT 0 ------------------------
+/*
+	Legend:
+	EIMSK: External interrupt mask register (Contains: INT0, INT1 - write 1 to enable them)
+	EIFR: External interrupt flag register (Contains: INTF1 and INTF0 - write 1 to clear them)
+		Similar to timer interrupts too for detecting compare match 
+*/
 ISR(INT0_vect)
 {
     // Modify this ISR to do anything you want
-    // Upon hardware activation, this function will be called 
 }
 
 int main(void)
@@ -32,29 +68,43 @@ int main(void)
     /* Replace with your application code */
     while (1)
     {
-     	// Replace with whatever you wish here   
     }
 }
 
 
 // ------------------------ Setting up Timer ---------------------------------
-
 /*
-    Timer 0: 8 bit
-    Timer 1: 16 bit
-    Timer 2: 8 bit
+    >>>>>>>>>>>>>Timer 0: 8 bit<<<<<<<<<<<<
+    >>>>>>>>>>>>>Timer 2: 8 bit<<<<<<<<<<<<
 
-    Warning: Do not write to TNCT while it is running, it will remove compare match
-    Also do not modify TNCT as you run the risk of missing a compare match
+	    Legend: 
+	    OCR: Output compare register (Usually your TOP value)
+	    TCCR: Timer/Counter control register 
+	    TCNT: Timer/Counter value
+	    TIMSK: Timer interrupt mask register (Contains == OCIE, output compare match interrupt enable)
+			Note: OCIE depends on TIFR to be set, then only interrupt vector will activate 
 
-    Num clock cycles required to process an operation: time_per_op/(1/clock_speed)
+	    TIFR: Timer interrupt flag register (Contains == OCF: Output compare match flag - write 1 to clear them)
+	    	Note: It does not automatically clear itself if interrupt is not enabled. 
 
 
-    Time interval b/w each timer: (OCR_A + 1) * (prescalar/clock_speed)
-    period = time inerval * 2
+	    Warning: Do not write to TNCT while it is running, it will remove compare match
+	    Also do not modify TNCT as you run the risk of missing a compare match
 
-    choosing a good prescaler value: V that does not exceed 255 and does not have a decimal (hopefully)
-    
+	    Num clock cycles required to process an operation: time_per_op/(1/clock_speed)
+		
+		freq pulse (CTC): clock_speed/(2 * N * (OCR + 1))
+		N is prescalar 
+
+	    choosing a good prescaler value: V that does not exceed 255 and does not have a decimal (hopefully)
+
+    >>>>>>>>>>>>>Timer 1: 16 bit<<<<<<<<<<<<
+
+    	Setting up of OCR we will have to use OCR_AL and OCR_AH, set to high and low byte registers
+	
+	>>>>>>>>>>>>>   Normal mode <<<<<<<<<<<<
+	Clock will count all the way till overflow and then resets itself. - it will also trigger TOV
+		Can be set to automatically TOV when timer interrupt is enabled. 
 */
 
 // The turn variable decides whose turn it is to go now.
@@ -66,32 +116,24 @@ static unsigned long _timerTicks = 0;
 // ISR for timer 2
 ISR(TIMER2_COMPA_vect) {
     // This interrupt will happen whenever TCNT reaches 256
-    _timerTicks++; // Global variable to count on each timer interrupts
-    if (_timerTicks == 251) {
-        turn = 1 - turn;
-        _timerTicks = 0;
-    }
 }
 
 // Timer set up function.
 void setupTimer()
 {
-    // Set timer 2 to produce 100 microsecond (100us) ticks
-    // But do no start the timer here.
     //Set Initial Timer value
     TCNT2=0; // initialise at 0
-    
-    //Place TOP timer value to Output compare register
-    OCR2A=15625; // Set this to the V value
 
+    //Place TOP timer value to Output compare register
+    OCR2A=255; // Set this to the V value (cant go above 255)
 	/*
 		res = 1/(F_clock/prescaler)
-
+			Note: prescalar acts as a clock divider 
 		V = period/res
     */
-
     //Set CTC mode
     //    and make toggle PD6/OC0A pin on compare match
+    // OC0A will only work if the DDR bit corresponding to that pin is set 
     TCCR2A=0b10000001;
     // Enable interrupts.
     TIMSK2|=0b010;
@@ -99,7 +141,6 @@ void setupTimer()
 
 void startTimer()
 {
-    // Start timer 2 here.
     //Set prescaler 256 and start timer
     TCCR2B=0b00000110;
     // Enable global interrupts
@@ -109,37 +150,28 @@ void startTimer()
 
 int main(void)
 {
-    // Set up timer 2
     setupTimer();
-    
-    // Start timer 2
-    startTimer();
-    
-    // Ensure that interrupts are enabled
-    sei();
-    
-    /* Replace with your application code */
+    startTimer();    
     while (1)
     {
-    	// Fill in whatever you wish whilst using turn to control your functions
     }
 }
-
 
 // ------------------------ Setting up PWM -----------------------------------
 /*
     * Digital bits are encoded over a fixed period of time
     * Analog values are encoded by the proportion of "1" time to "0" time within this fixed time
     
-    freq of PWM = f(clk_I/O) / (N * 510)        where N is the prescalar factor, f(clk) is assumed to be 16mhz
+		During fast PWM mode: TOP will be set to 255 (0xFF). Freq will be 
+		
+		freq of PWM (FAST): clock_speed/(N * 256)
+		freq of PWM (PHASE CORRECT): clock_speed/(N * 510)
+		N is prescalar 
 
-    eg. for 500Hz, we get N to be 62.74 --> Closest value of N is 64
+	    eg. for 500Hz PWM, we get N = 62.74 --> Closest value of N is 64, set this for prescalar
 
-
-    The duty cycle is determined by the value stored in the OCR0A register
-    D = (0CR0A/255) * 100
-
-    
+	    The duty cycle is determined by the value stored in the OCR0A register
+	    D = (0CR0A/255) * 100    
 */
 
 void InitPWM()
@@ -167,7 +199,6 @@ int main(void)
     DDRD |= (1 << DDD6); 
     InitPWM();
     startPWM();
-
     while (1)
     {
     }

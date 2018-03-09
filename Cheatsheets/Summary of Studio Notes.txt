@@ -1,0 +1,236 @@
+W2S2 (General git commands)
+  1. git init -> initialises repository
+  2. git status -> self explanatory (checks status of your repo)
+  3. git add Sample.txt -> start tracking the text file
+  4. git commit -m -> Commit message
+  5. git diff -> check differences made due to commit
+  6. git commit -a -m -> will stage and commit all previous files
+  7. git log -> current version recorded
+  8. git checkout -- Sample.txt -> retrieves from a particular version
+  9. git push/pull/fork -> Common Version Control commands
+------------------------------------------------------------------------------------------------------------------------------------------
+  
+W3S1 (Time Complexity)
+  O(1) < O(lg(n)) < O(n) < O(n lg(n)) < O(n^2) < O(n^3) < O(2^n)
+  
+  1. Choose the smallest function that upper bounds the time function of the program
+  2. Disregard any coefficient
+  
+------------------------------------------------------------------------------------------------------------------------------------------
+W4S1 (Arduino GPIO Programming)
+  1. Data represented as 1's and 0's (logical representations)
+  2. Logic 0 --> 0 volts; Logic 1 --> microcontroller's supply voltage
+  3. Byte = 8 bits; Nibble = 4 bits; Word = multiples of bytes
+  
+  N bits represents 2^N values (e.g. 4 bits --> 16 values)
+  To represent M values, floor (log2M) bits are required (e.g. 40 values --> 6 bits)
+  
+  Bitwise operators in C:
+    AND (&), OR (|), NOT (~)
+  
+  Bit Masking
+    Operators are used for setting or clearing a bit
+    1. Clear a bit --> mask with that bit 0, rest of the bits 1, do a bit wise AND
+    2. Set a bit --> mask with that bit 1, rest of the bits 0, do a bit wise OR
+    
+    e.g. let us have a value = 0b1101 1110
+      (i) To clear bit 3: value &= 0b1111 0111
+      (ii) To set bit 5: value |= 0b0010 0000
+      
+  ATMEGA Specs:
+    1. 20 MHz 8-bit microcontroller
+    2. 32 single-byte registers
+    3. 23 GPIO lines
+    4. 2 8-bit counters and 1 16-bit counters
+    5. 3 PWM Channels
+    6. 6 analog-digital converter channels
+    
+  GPIO Ports
+    3 Ports: PortB, PortC, PortD
+    Corresponding pins on the AVR:
+      (i) PB0-7 (8 lines)
+      (ii) PC0-6 (7 lines)
+      (iii) PD0-7 (8 lines)
+    --> PD0 and PD1 are also used by receive (RXD) and transmit (TXD) lines for USART
+    
+  GPIO Programming:
+    1. Set direction of individual pins
+      (i) Done using DDRx registers (DDRB or DDRC or DDRD)
+      (ii) 1 sets a bit to be output, 0 sets it to input
+        To set as output: DDRx |= 0b00100000 (sets bit 5 as output)
+        T0 set as input: DDRx &= 0b11011111 (sets bit 5 as input)
+    2. Use Port registers to write to the pins
+      (i) PORTx registers (PORTB, PORTC, PORTD)
+      (ii) If 1 is set to a bit 3 in DDRx, and a 1 is set to bit 3 in PORTx --> pin Px3 is HIGH
+    3. Use PINx to read the pins
+      (i) Use bit-masking to test the status of a pin; e.g. pin PB3
+      (ii) result = PINB & 0b00001000
+        If PB3 contains a 1 -> bit 3 of result = 1
+        If PB3 contains a 0 -> bit 3 of result = 0
+         
+------------------------------------------------------------------------------------------------------------------------------------------
+W5S1 (Interrupts)
+  3 ways to access I/O Devices
+  1. Polling (continuously checking)
+    - Simplest form of I/O Programming
+    - CPU can perform other operations during this time
+    Example code:
+    
+    #define inputPin 2
+    …
+    void loop()
+      {
+        while(1)
+          {
+           // When pin 2 is HIGH we know
+           // data is available at
+           // analog input A0.
+          while(!digitalRead(inputPin))	
+          ;
+          data=analogRead(0);
+          // process data
+          ...
+      }
+
+  2. Interrupt-drive I/O
+     - Interrupts assert an IRQ -> Interrupt Request lines on the CPU
+     - AVR uses a table to execute the correct handler routine
+     - Triggers an ISR -> Interrupt Service Routine
+     
+     (i) Use attachInterrupt to specify ISR to process interrupts
+     (ii) UNO Board receives interrupts on pins 2 and 3 (INT0 and INT1)
+     (ii) Mode: LOW, CHANGE, RISING, FALLING
+     (iv) Example : attachInterrupt(digitalPinToInterrupt(pinnum), function, mode)
+
+  Bare-Metal AVR Interrupt Programming
+  1. ISR Macro:
+        ISR(vector)
+        {
+	          ISR Code
+        }
+    (i) Vector parameter --> interrupt you want to process
+    (ii) E.g. to handle PCINT0 interrupt, you would write PCINT0_vect in vector
+  2. Arduino Pins
+    (i) Pins 2 and 3 -> INT0 and INT1 (which are external interrupts)
+    (ii) INT0 and INT1 can be configured in how they respond to interrupt requests:
+        Bits 3 and 2 in INT1, and bits 1 and 0 in INT0:
+        - 00: LOW level
+        - 01: Logical Change
+        - 10: Falling edge
+        - 11: Rising edge
+   
+   
+   Interrupt Masking
+   - Used to ignore almost all interrupts
+        Arduino Wiring Language:
+          (i) noInterrupts() -> disable all interrupts
+          (ii) interrupts() -> enable all interrupts
+        Bare-metal:
+          (i) cli() -> disable all interrupts
+          (ii) sei() -> enable all interrupts
+          
+------------------------------------------------------------------------------------------------------------------------------------------
+W6S1 (Arduino PWM Programming)
+   - Digital bits are encoded over a fixed period of time
+   - Analog values are encoded by the proportion of "1" time to "0" time within this fixed time
+        (i) This proportion is called the Duty Cycle (D)
+        (ii) E.g. if PWM signal consists of 8-bits, analog signals are from 0 to 5v, (10000000)2 corresponds to 2.5 volts (50% duty cycle)
+   
+   Generating PWM Output
+    - PWM generated using timers
+    - Phase Correct PWM: allows symmetric wave forms, better resoltution at expense of max. frequency (Better for motors than Fast PWM)
+    - Timer can be clocked by internal or external clock source
+        (i) Clock Source selected by writing to Clock Select (CS0[2:0]) bits in the Timer/Counter Register TCCR0A/B
+   
+   Frequency
+    - Clock source is linked with the desired PWM frequency
+    - E.g. let's set a desired frequency of 500Hz
+    - We need a prescalar based on the following formula:
+        f(PWM) = f(clk_I/O) / N * 510
+            (i) N - prescalar value
+            (ii) f(clk) is assumed to be 16MHz
+            (iii) Therefore for 500Hz, we get N to be 62.74 --> Closest value of N is 64
+            (iv) Real f(PWM) = 490Hz
+    
+    Counter Unit
+      - Once clk is set, TCNTn register will increment based on desired frequency
+    
+    Output Compare Unit
+      - Unit continuously compares TCNT0 to Outpur Compare Registers (OCR0A and OCR0B)
+      - When TCNT0 == OCR0A || TCNT0 == OCR0B, comparator signals a match
+      - Match sets Output Compare Flag (OCF0A or OCF0B) at the next timer clock cycle
+      - If corresponding interrupt is enabled, Output Compare Flag generates an Output Compare interrupt
+    
+    Duty Cycle
+      - Determined by value of OCR0A register, formula shown below:
+            D = (0CR0A/255) * 100
+            (i) For Duty Cycle of 50%, desired voltage is 2.5V
+            (ii) Value of OCR0A is 255/2 = 127.5, closest is 128 or 127
+            (iii) If 128 is chosen, duty cycle is 50.196%, giving a voltage of 2.51V
+    
+    Interrupts
+      - Timer can generate interrupts when there is an Output Compare of when TCNT0 rolls over
+      - Useful in setting a new PWM duty cycle at the end of the current PWM signal
+    
+    Process to generate a phase correct PWM
+      1. Load 0 into the initial count register TCNT0 --> TCNT = 0;
+      2. Load desired value into OCR0A based on PWM Duty Cycle (e.g. for 50% DC, load a value of 128) --> OCR0A = 128;
+      3. COnfigure WGM[2:0] bis in TCCR0A/B register to configure the desired type of PWM (Mode 1 Phase Correct --> 001)
+      4. Set COM0A1 to 0b10 --> ensures that when TCNT0 counts up from 0 to OCR0A it clears the OC0A and sets it when 
+         TCNT0 counts down from 255 to OCR0A (therefore TCCR0A = 0b10000001)
+      
+------------------------------------------------------------------------------------------------------------------------------------------
+W6S2 (Timers)
+
+3 timers on the AtMega328:
+  1. Two 8-bit timers: Timer 0 and 2
+      (i) Counts from 0 to 255, then back to 0
+      (ii) Triggers interrupt (TOV0 or TOV2) when counter rolls over from 255 to 0 or when counter matches a value
+  2. One 16-bit timer: Timer 1
+      (i) Counts from 0 to 65535, then back to 0
+      (ii) Triggers interrupt (TOV1) when counter rolls over from 65535 to 0 or when counter matches a value
+
+
+CTC Mode
+  1. Clear Timer on Compare Mode
+      (i) Counter TCNT0 starts at 0, counts to a preset "top value" V, then rolls over back to 0
+      (ii) "Timer match" interrupt triggered each time TCNT0 matches OCR0A or OCR0B
+            --> Useful for generating interrupts at fixed times, e.g. every 1 ms
+  
+ To Program CTC Mode in Timer 0:
+    1. Decide on the time period (e.g. 1ms)
+    
+    2. Decide on a prescalar value P and count value V
+        -> Determines the resolution res of the timer (i.e. amount of time between "increments"of the counter)
+        -> Frequency given by the equation below:
+                                res = F(clock)/P
+        -> Resolution of the prescalar is 1/res
+    
+        -> Prescalar chosen using bits 2 to 0 (CS02:00) of TCCR0B
+                                Resoltuon = 1/(F(clock)/P)
+    
+    3. Set up ISR for OC0A (Timer 0 Output Compare Match A)
+        -> TOV0 interrupt triggered when TCNT0 reaches top timer value V and rolls back to 0
+        -> Decide of T(cycle) --> time which the timer triggers the timer interrupt
+        
+                                V = T(cycle)/res
+        -> Choose the value that gives the best possible resolution (better resolution = more accurate timings)
+    
+    4. Set Initial timer value of 0 into TCNT0 (i.e. TCNT0 = 0)
+    
+    5. Set top count value V into OCR0A (i.e. for 250 steps, OCR0A = 249(
+    
+    6. Set CTC Mode in TCCR0A
+        -> COM0A1 and COM0A0 control what to do with OC0A each time we hit the top value V in OCR0A
+          -> We want to toggle OC0A on match, so we choose COM0A1 and COM0A0 to "01" respectively
+        -> The WGM00, WGM01 and WGM02 bits control the waveform generation
+          -> We use CTC so WGM01 and WGM00 are "01" WGM02 is in TCCR0B
+        i.e. TCCR0A = 0b01000010;
+        Also need to enable OCIE0A interrupt by writing a 1 to bit 1 of the Timer/Counter Interrupt Mask Register (i.e. TIMSK0 |= 0b10)
+    
+    7. Set prescalar value into TCCR0B to start the timer
+        -> Use bits CS02:CS00 to do this
+        e.g. prescalar value of 64 -> 011
+        -> We also need WGM02 to be 0
+        -> Therefore, TCCR0B=0b00000011;
+        -> Finally, enable global interrupts using sei();
