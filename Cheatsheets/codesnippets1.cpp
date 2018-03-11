@@ -53,6 +53,17 @@ ISR(INT0_vect)
     // Modify this ISR to do anything you want
 }
 
+// Nested interrupts 
+// Nested interrupts cannot happen unless we renable global interrupts in the vector table itself 
+ISR (INT1_vect) {
+    /*
+        Activate external events to trigger INT0 
+    */
+    // Interrupt will not occur unless we call 
+    sei(); // enables global interrupts. 
+
+}
+
 int main(void)
 {
 	// Enable INT0
