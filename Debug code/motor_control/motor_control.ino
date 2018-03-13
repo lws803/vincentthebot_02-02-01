@@ -18,26 +18,50 @@
 
 char dataRecv, dataSend;
 
+// volatile char currState = '\0';
+volatile int startSpeed = 255;
+
+
 // Completes receiving 
 ISR( USART_RX_vect )
 {
   // Write received data to dataRecv
   dataRecv = UDR0;
   sendData(dataRecv); // Sending the character back
-  // sei(); - uncomment this if it doesnt work 
+  // sei(); //- uncomment this if it doesnt work 
   if (dataRecv == 'w') {
     // Nested interrupts - probably 
+    startSpeed = 200;
     right_motor_forward(); // Will keep interrupting and calling move forward
     left_motor_forward();
     UCSR0B |= 0b00100000;
   }else if (dataRecv == 's') {
+    startSpeed = 200;
     right_motor_reverse();
-    left_motor_reverse();
-    //flashWhich = 0; // Backwards
-    
+    left_motor_reverse();        
     UCSR0B |= 0b00100000;
   }
-  
+  else if (dataRecv == 'd') {
+    // Turn right 
+    startSpeed = 200;
+    right_motor_forward(); // Will keep interrupting and calling move forward
+    left_motor_reverse();
+    UCSR0B |= 0b00100000;
+  }
+  else if (dataRecv == 'a') {
+    startSpeed = 200;
+    right_motor_reverse(); // Will keep interrupting and calling move forward
+    left_motor_forward();
+    UCSR0B |= 0b00100000;
+  }
+  else if (dataRecv == 'q') {
+    startSpeed = 0;
+    UCSR0B |= 0b00100000;  
+  }
+  else if (dataRecv == 'r') {
+    startSpeed = 200;
+    UCSR0B |= 0b00100000;  
+  }
 }
 
 // Complete sending
@@ -45,7 +69,6 @@ ISR( USART_UDRE_vect )
 {
   // Write dataSend to UDR0
   // Disable UDRE interrupt
-  //dataSend = 'W';
   //UDR0 = dataSend;
   UCSR0B &= 0b11011111; // Reset UDRIE to 0 
   //flashRed();
@@ -71,19 +94,19 @@ void startPWM() {
 }
 
 ISR(TIMER0_COMPA_vect) {
-  OCR0A = 128;
+  OCR0A = startSpeed;
 }
 
 ISR(TIMER0_COMPB_vect) {
-  OCR0B = 128;
+  OCR0B = startSpeed;
 }
 
 ISR(TIMER2_COMPA_vect) {
-  OCR2A = 128;
+  OCR2A = startSpeed;
 }
 
 ISR(TIMER2_COMPB_vect) {
-  OCR2B = 128;
+  OCR2B = startSpeed;
 }
 
 void right_motor_forward(void) {
@@ -108,10 +131,7 @@ void left_motor_reverse(void) {
 
 
 void stop_motor () {
-  PORTD &= 0b11011111;
-  PORTD &= 0b11011111;
-  PORTD &= 0b10111111;
-  PORTD &= 0b11011111;
+  startSpeed = 0;
 }
 
 void sendData(const char data)
@@ -202,6 +222,6 @@ void setup() {
 
 
 void loop() {
-    stop_motor(); // So that it will stop as long as user does not enter keypress. 
+    //stop_motor(); // So that it will stop as long as user does not enter keypress. 
 }
 
