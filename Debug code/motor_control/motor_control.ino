@@ -34,34 +34,29 @@ ISR( USART_RX_vect )
     startSpeed = 200;
     right_motor_forward(); // Will keep interrupting and calling move forward
     left_motor_forward();
-    UCSR0B |= 0b00100000;
   }else if (dataRecv == 's') {
     startSpeed = 200;
     right_motor_reverse();
     left_motor_reverse();        
-    UCSR0B |= 0b00100000;
   }
   else if (dataRecv == 'd') {
     // Turn right 
     startSpeed = 200;
     right_motor_forward(); // Will keep interrupting and calling move forward
     left_motor_reverse();
-    UCSR0B |= 0b00100000;
   }
   else if (dataRecv == 'a') {
     startSpeed = 200;
     right_motor_reverse(); // Will keep interrupting and calling move forward
     left_motor_forward();
-    UCSR0B |= 0b00100000;
   }
   else if (dataRecv == 'q') {
     startSpeed = 0;
-    UCSR0B |= 0b00100000;  
   }
   else if (dataRecv == 'r') {
     startSpeed = 200;
-    UCSR0B |= 0b00100000;  
   }
+  UCSR0B |= 0b00100000;
 }
 
 // Complete sending
