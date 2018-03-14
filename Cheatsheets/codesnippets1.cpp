@@ -98,16 +98,18 @@ int main(void)
 	    TIFR: Timer interrupt flag register (Contains == OCF: Output compare match flag - write 1 to clear them)
 	    	Note: It does not automatically clear itself if interrupt is not enabled. 
 
+	    - Warning: Do not write to TNCT while it is running, it will remove compare match
+        Also do not modify TNCT as you run the risk of missing a compare match
 
-	    Warning: Do not write to TNCT while it is running, it will remove compare match
-	    Also do not modify TNCT as you run the risk of missing a compare match
-
-	    Num clock cycles required to process an operation: time_per_op/(1/clock_speed)
+	    - Num clock cycles required to process an operation: time_per_op/(1/clock_speed)
 		
-		freq pulse (CTC): clock_speed/(2 * N * (OCR + 1))
+		- freq pulse (CTC): clock_speed/(2 * N * (OCR + 1))
 		N is prescalar 
 
-	    choosing a good prescaler value: V that does not exceed 255 and does not have a decimal (hopefully)
+	    - choosing a good prescaler value: V that does not exceed 255 and does not have a decimal (hopefully)
+
+        - On CTC mode, even if we have 2 OCRs the register will be hit and cleared the instance it hits the first OCR even if they have different 
+        prescalar value.     
 
     >>>>>>>>>>>>>Timer 1: 16 bit<<<<<<<<<<<<
 
@@ -182,7 +184,7 @@ int main(void)
 	    eg. for 500Hz PWM, we get N = 62.74 --> Closest value of N is 64, set this for prescalar
 
 	    The duty cycle is determined by the value stored in the OCR0A register
-	    D = (0CR0A/255) * 100    
+	    D = (0CR0A/255) * 100 
 */
 
 void InitPWM()
