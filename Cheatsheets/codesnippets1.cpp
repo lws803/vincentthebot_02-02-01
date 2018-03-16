@@ -35,7 +35,8 @@ void conditions() {
 int main () {
 	DDRB |= 0b00001000; // Set pin to output 
 	DDRD &= 0b00100000; // Set pin to input, make sure we do this to set the pin to input mode
-
+    
+    PIND |= 0b00100000; // Will set the output pin to active high, meaning it will register when pulled down 
 	// Note: For output or input even if its active high or low, we do not care. We will still set this according to
 	// whether it is an input or output. 
 	switchLED();
