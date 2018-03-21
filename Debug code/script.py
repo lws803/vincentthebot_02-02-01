@@ -3,7 +3,7 @@ import time
 
 port = serial.Serial(port = '////', baudrate = 9600);
 
-if (!port.isOpen)
+if (not port.isOpen)
 	port.open();
 
 port.write("Enter commands")
