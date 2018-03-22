@@ -11,6 +11,8 @@
 #define PIN12MASK   0b00010000
 #define PIN11MASK   0b00100000
 
+// pin 6 and 5, 11 and 3
+
 // UDRIE mask. Use this to enable/disable
 // the UDRE interrupt
 #define UDRIEMASK   0b00100000
@@ -39,13 +41,13 @@ ISR( USART_RX_vect )
     right_motor_reverse();
     left_motor_reverse();        
   }
-  else if (dataRecv == 'd') {
-    // Turn right 
+  else if (dataRecv == 'a') {
+    // Turn left
     startSpeed = 200;
     right_motor_forward(); // Will keep interrupting and calling move forward
     left_motor_reverse();
   }
-  else if (dataRecv == 'a') {
+  else if (dataRecv == 'd') {
     startSpeed = 200;
     right_motor_reverse(); // Will keep interrupting and calling move forward
     left_motor_forward();
