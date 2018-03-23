@@ -20,13 +20,13 @@ volatile TDirection dir = STOP;
 // Number of ticks per revolution from the 
 // wheel encoder.
 
-#define COUNTS_PER_REV 123
+#define COUNTS_PER_REV 95
 
 // Wheel circumference in cm.
 // We will use this to calculate forward/backward distance traveled 
 // by taking revs * WHEEL_CIRC
 
-#define WHEEL_CIRC 20
+#define WHEEL_CIRC 20.4
 
 // Motor control pins. You need to adjust these till
 // Vincent moves in the correct direction
@@ -219,7 +219,7 @@ void enablePullups()
 {
 	// Use bare-metal to enable the pull-up resistors on pins
 	// 2 and 3. These are pins PD2 and PD3 respectively.
-	// We set bits 2 and 3 in DDRD to 0 to make them inputs. \
+	// We set bits 2 and 3 in DDRD to 0 to make them inputs. 
 	DDRD &= 0b11110011;
 	PIND |= 0b00001100;
 }

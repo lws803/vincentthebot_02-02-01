@@ -1,12 +1,15 @@
 #include <stdio.h>
 #include <iostream>
 
+#include "serialize.h"
+
 using namespace std;
 
 u_char buf[100]; // already a pointer
 
 
 unsigned int PACKET_OK = 0, PACKET_BAD_CHECKSUM = 1;
+
 
 
 unsigned int serialize(void *p, size_t size)
@@ -53,6 +56,7 @@ unsigned int deserialize(void *p, u_char *buf)
     }
 }
 
+/*
 int main () {
     
     // I can send any struct I want
@@ -84,3 +88,4 @@ int main () {
     cout << "Received string: " << receivePacket.s << endl;
 
 }
+*/
