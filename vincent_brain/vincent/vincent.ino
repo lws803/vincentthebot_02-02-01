@@ -20,7 +20,7 @@ volatile TDirection dir = STOP;
 // Number of ticks per revolution from the 
 // wheel encoder.
 
-#define COUNTS_PER_REV 95
+#define COUNTS_PER_REV 195
 
 // Wheel circumference in cm.
 // We will use this to calculate forward/backward distance traveled 
@@ -150,7 +150,7 @@ void sendBadPacket()
 {
 	// Tell the Pi that it sent us a packet with a bad
 	// magic number.
-
+//lightRed();
 	TPacket badPacket;
 	badPacket.packetType = PACKET_TYPE_ERROR;
 	badPacket.command = RESP_BAD_PACKET;
@@ -203,7 +203,7 @@ void sendResponse(TPacket *packet)
 	// over the serial port.
 	char buffer[PACKET_SIZE];
 	int len;
-
+	
 	len = serialize(buffer, packet, sizeof(TPacket));
 	writeSerial(buffer, len);
 }
@@ -229,8 +229,7 @@ void leftISR()
 {
 	if (dir == FORWARD) {
 		leftForwardTicks++;
-		forwardDist = (unsigned long) ((float) leftForwardTicks 
-			/ COUNTS_PER_REV * WHEEL_CIRC);
+		forwardDist = (unsigned long) ((float) leftForwardTicks / COUNTS_PER_REV * WHEEL_CIRC);
 	}
 	else if (dir == BACKWARD) {
 		leftReverseTicks++;
@@ -242,8 +241,8 @@ void leftISR()
 		rightForwardTicksTurns++;
 	}
 
-	//Serial.print("LEFT: ");
-	//Serial.println((double)leftTicks/COUNTS_PER_REV * WHEEL_CIRC);
+	//Serial.print("DIST: ");
+	//Serial.println(forwardDist);
 }
 
 void rightISR()
@@ -608,7 +607,18 @@ void waitForHello()
 	} // !exit
 }
 
+// Light up red led for debugging
+void lightRed() {
+	PORTD |= 0b00010000;
+	delay(500);
+	PORTD &= 0b11101111;
+	delay(500);
+}
+
 void setup() {
+
+	// Setup PD4 as output pin for red led lighting
+	DDRD |= 0b00010000;
 
 	cli();
 	setupEINT();
