@@ -51,7 +51,11 @@ private:
     double cartesian_count (int x, int y, int x_target, int y_target) {
         double difference_x = x - x_target;
         double difference_y = y - y_target;
-        return sqrt (difference_x*difference_x + difference_y*difference_y);
+        if (mode) {
+            return sqrt (difference_x*difference_x + difference_y*difference_y);
+        }else {
+            return abs(difference_x) + abs(difference_y);
+        }
     }
     
     
@@ -59,7 +63,7 @@ private:
         int i,d;
         for (i = 0; i < MAX; i++) {
             for (d = 0; d < MAX; d++) {
-                cout << (int)maze[i][d] << " ";
+                printf("%2d ", maze[i][d]);
             }
             cout << endl;
         }
@@ -141,26 +145,25 @@ private:
     
     // Modify this to provide way point management, if no waypoint, then it will stop and wait
     void start_end_scan (coords_t *start, coords_t *end, int8_t maze[][MAX]) {
-        int i, d;
-        for (i = 0; i < MAX; i++) {
-            for (d = 0; d < MAX; d++) {
-                if (maze[i][d] == -1) {
-                    start-> x = d;
-                    start-> y = i;
-                }
-                if (maze[i][d] == -2) {
-                    end-> x = d;
-                    end-> y = i;
-                }
-            }
-        }
+        cout << "Enter start and end coords" << endl;
+        cout << "start: ";
+        cin >> start->x >> start->y;
+        cout << "end: ";
+        cin >> end->x >> end->y;
+        
+        
+        
         start->g_cost = 0;
         start->h_cost = cartesian_count(start->x, start->y, end->x, end->y);
         end->h_cost = 0;
         end->g_cost = cartesian_count(start->x, start->y, end->x, end->y);
     }
 public:
+    // Params to set
     int probability = 4;
+    int mode = 1; // 0 means manhattan distance, 1 means cartesian distance
+    
+    
     
     A_star (int h, int w) {
         // height and width of map
@@ -176,9 +179,9 @@ public:
         int8_t maze[MAX][MAX] = {
             {5,5,5,5,5,5,5,5,5,5,5},
             {5,0,0,0,0,5,0,5,0,0,5},
-            {5,5,0,5,0,0,0,5,0,0,5},
-            {5,0,0,0,0,0,0,0,0,0,-1},
-            {-2,0,0,0,0,5,5,0,0,0,5},
+            {5,5,0,0,0,0,0,0,0,0,5},
+            {5,0,0,0,0,0,0,0,0,0,5},
+            {5,0,0,0,0,0,0,0,0,0,5},
             {5,0,0,0,0,0,0,0,0,0,5},
             {5,0,0,0,0,0,0,0,0,0,5},
             {5,0,0,0,0,0,0,0,0,0,5},
@@ -191,16 +194,17 @@ public:
         coords_t *end = new coords_t;
         // We can disable scan_maze
         
+        start_end_scan(start, end, maze);
+        
         cout << "Original Maze:" << endl;
         print_maze(maze);
-        start_end_scan(start, end, maze);
         
         // Initial run
         scan_neighbours (maze, start, *start, *end);
         pathfinder(*start, *end, maze);
         
         // Traceback
-        maze[end->y][end->x] = 9; // We use 9 to signify the path
+        maze[end->y][end->x] = -3; // We use 9 to signify the path
         coords_t* current_point;
         // Search for end point (find end node)
         for (auto iterator = closed.begin(); iterator != closed.end(); ++iterator) {
@@ -213,7 +217,7 @@ public:
         while (current_point->x != start->x || current_point->y != start->y) {
             // Continue tracing
             current_point = current_point->parent;
-            maze[current_point->y][current_point->x] = 9;
+            maze[current_point->y][current_point->x] = -3;
         }
         cout << "Shortest path:" << endl << endl;
         print_maze (maze);
@@ -231,6 +235,4 @@ int main(int argc, const char * argv[]) {
 }
 
 // TODO: Set it up such that it can receive a dynamic map from hector slam and process it then output the shortest path based on a fixed destination on the map
-
-
 
