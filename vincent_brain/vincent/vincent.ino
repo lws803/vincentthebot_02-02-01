@@ -144,6 +144,7 @@ void initializeState();
 void lightRed();
 
 
+
 /*
  *
  * Setup Arduino
@@ -535,6 +536,8 @@ void setupEINT()
 // TODO: Implement adjustments during interrupts
 ISR (INT0_vect) {
 	leftISR();
+	
+	// Check for adjustments
 	if (getAdjustReadings() == NEED_ADJUST_LEFT) adjustLeft(100);
 	else adjustRight(100);
 }
