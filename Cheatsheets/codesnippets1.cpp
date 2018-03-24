@@ -109,6 +109,9 @@ int main(void)
 		- freq pulse (CTC): clock_speed/(2 * N * (OCR + 1))
 		N is prescalar 
 
+        - Rate at which TCNT is incremented = N/ clock_speed        where N is the prescalar
+            because of clock division, it takes longer to increment TCNT by 1. it will take N * time_taken per cycle to make one increment 
+
 	    - choosing a good prescaler value: V that does not exceed 255 and does not have a decimal (hopefully)
 
         - On CTC mode, even if we have 2 OCRs the register will be hit and cleared the instance it hits the first OCR even if they have different 
