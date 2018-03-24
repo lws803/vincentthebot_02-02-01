@@ -23,7 +23,7 @@ volatile TDirection dir = STOP;
 #define COUNTS_PER_REV 195
 
 // Wheel circumference in cm.
-// We will use this to calculate forward/backward distance traveled 
+// We will use this to calculate forward/backward distance travelled 
 // by taking revs * WHEEL_CIRC
 
 #define WHEEL_CIRC 20.4
@@ -34,6 +34,10 @@ volatile TDirection dir = STOP;
 #define LR 5   // Left reverse pin
 #define RF 11  // Right forward pin
 #define RR 10  // Right reverse pin
+
+// Determine if left/right adjustments are needed
+#define NEED_ADJUST_LEFT 0 
+#define NEED_ADJUST_RIGHT 1
 
 // PI, for calculating turn circumference
 #define PI 3.141592654
@@ -50,7 +54,7 @@ float vincentDiagonal = 0.0;
 float vincentCirc = 0.0;
 
 /*
- *    Vincent's State Variables
+ *	  Vincent's State Variables
  */
 
 // Store the ticks from Vincent's left and
@@ -71,7 +75,7 @@ volatile unsigned long rightReverseTicksTurns;
 volatile unsigned long leftRevs;
 volatile unsigned long rightRevs;
 
-// Forward and backward distance traveled
+// Forward and backward distance travelled
 volatile unsigned long forwardDist;
 volatile unsigned long reverseDist;
 
@@ -83,6 +87,161 @@ unsigned long newDist;
 // Variables to keep track of our turning angle
 unsigned long deltaTicks;
 unsigned long targetTicks;
+
+// Variables to keep track of current speed
+float currentSpeed;
+
+/* 
+ *
+ *	ALL function prototypes
+ *
+ */
+// Handle ongoing communications
+TResult readPacket(TPacket *packet);
+void sendStatus();
+void sendMessage(const char *message);
+void sendBadPacket();
+void sendBadChecksum();
+void sendBadCommand();
+void sendBadResponse();
+void sendOK();
+void sendResponse(TPacket *packet);
+void handleCommand(TPacket *command);
+void waitForHello();
+void handlePacket(TPacket *packet);
+
+// Set up interrupts
+void enablePullups();
+void leftISR();
+void rightISR();
+void setupEINT();
+ISR (INT0_vect);
+ISR (INT1_vect);
+
+// Set up serial communications
+void setupSerial();
+void startSerial();
+int readSerial(char *buffer);
+void writeSerial(const char *buffer, int len);
+
+// Start the motors
+void setupMotors();
+int pwmVal(float speed);
+void forward(float dist, float speed);
+void reverse(float dist, float speed);
+unsigned long computeDeltaTicks(float ang);
+void left(float ang, float speed);
+void right(float ang, float speed);
+void adjustLeft(float increment);
+void adjustRight(float increment);
+int getAdjustReadings();
+void stop();
+
+// Handle the statistics
+void clearCounters();
+void clearOneCounter(int which);
+void initializeState();
+
+// Debugging
+void lightRed();
+
+
+/*
+ *
+ * Setup Arduino
+ *
+ */
+void setup() {
+
+	// Setup PD4 as output pin for red led lighting
+	DDRD |= 0b00010000;
+
+	cli();
+	setupEINT();
+	setupSerial();
+	startSerial();
+	setupMotors();
+	startMotors();
+	enablePullups();
+	initializeState();
+	sei();
+	
+	// Compute Vincent's diagonal and circumference
+	vincentDiagonal = sqrt((VINCENT_LENGTH * VINCENT_LENGTH) 
+		+ (VINCENT_BREADTH * VINCENT_BREADTH)); 
+	vincentCirc = PI * vincentDiagonal;
+}
+
+/*
+ *
+ * Continuous loop
+ *
+ */
+void loop() {
+	
+	// Check when Vincent can stop moving forward/backward after
+	// it is given a fixed distance to move forward/backward
+	if (deltaDist > 0) {
+		if (dir == FORWARD) {
+			if (forwardDist > newDist) {
+				deltaDist = 0;
+				newDist = 0;
+				stop();
+			}
+		}
+		else if (dir == BACKWARD) {
+			if (reverseDist > newDist) {
+				deltaDist = 0;
+				newDist = 0;
+				stop();
+			}
+		}
+		else if (dir == STOP) {
+			deltaDist = 0;
+			newDist = 0;
+			stop();
+		}
+	}
+		
+	// Check when Vincent can stop turning left/right after
+	// it is given a fixed angle to turn left/right
+	if (deltaTicks > 0) {
+		if (dir == LEFT) {
+			if (leftReverseTicksTurns >= targetTicks) {
+				deltaTicks = 0;
+				targetTicks = 0;
+				stop();
+			}
+		}
+		else if (dir == RIGHT) {
+			if (rightReverseTicksTurns >= targetTicks) {
+				deltaTicks = 0;
+				targetTicks = 0;
+				stop();
+			}
+		}
+		else if (dir == STOP) {
+			deltaTicks = 0;
+			targetTicks = 0;
+			stop();
+		}
+	}
+	
+	// Retrieve packets from RasPi and handle them
+	TPacket recvPacket; // This holds commands from the Pi
+	TResult result = readPacket(&recvPacket);
+	if(result == PACKET_OK)
+		handlePacket(&recvPacket);
+	else
+		if(result == PACKET_BAD)
+		{
+			sendBadPacket();
+		}
+		else
+			if(result == PACKET_CHECKSUM_BAD)
+				sendBadChecksum();
+				
+}
 
 /*
  * 
@@ -150,7 +309,7 @@ void sendBadPacket()
 {
 	// Tell the Pi that it sent us a packet with a bad
 	// magic number.
-//lightRed();
+	
 	TPacket badPacket;
 	badPacket.packetType = PACKET_TYPE_ERROR;
 	badPacket.command = RESP_BAD_PACKET;
@@ -166,7 +325,7 @@ void sendBadChecksum()
 	TPacket badChecksum;
 	badChecksum.packetType = PACKET_TYPE_ERROR;
 	badChecksum.command = RESP_BAD_CHECKSUM;
-	sendResponse(&badChecksum);  
+	sendResponse(&badChecksum);	 
 }
 
 void sendBadCommand()
@@ -208,6 +367,111 @@ void sendResponse(TPacket *packet)
 	writeSerial(buffer, len);
 }
 
+void handleCommand(TPacket *command)
+{
+	switch(command->command)
+	{
+		// For forward/reverse commands, param[0] = distance, param[1] = speed.
+		// For turn left/right commands, param[0] = angle, param[1] = speed;
+		// For adjust left/right commands, param[0] = increment;
+		case COMMAND_FORWARD:
+			sendOK();
+			forward((float) command->params[0], (float) command->params[1]);
+			break;
+		case COMMAND_REVERSE:
+			sendOK();
+			reverse((float) command->params[0], (float) command->params[1]);
+			break;
+		case COMMAND_TURN_LEFT:
+			sendOK();
+			left((float) command->params[0], (float) command->params[1]);
+			break;
+		case COMMAND_TURN_RIGHT:
+			sendOK();
+			right((float) command->params[0], (float) command->params[1]);
+			break;
+		case COMMAND_ADJUST_LEFT:
+			sendOK();
+			adjustLeft((float) command->params[0]);
+			break;
+		case COMMAND_ADJUST_RIGHT:
+			sendOK();
+			adjustRight((float) command->params[0]);
+			break;
+		case COMMAND_STOP:
+			sendOK();
+			stop();
+			break;
+		case COMMAND_GET_STATS:
+			sendStatus();
+			break;
+		case COMMAND_CLEAR_STATS:
+			sendOK();
+			clearOneCounter(command->params[0]);
+			break;
+		default:
+			sendBadCommand();
+	}
+}
+
+void waitForHello()
+{
+	int exit=0;
+
+	while(!exit)
+	{
+		TPacket hello;
+		TResult result;
+
+		do
+		{
+			result = readPacket(&hello);
+		} while (result == PACKET_INCOMPLETE);
+
+		if(result == PACKET_OK)
+		{
+			if(hello.packetType == PACKET_TYPE_HELLO)
+			{
+
+
+				sendOK();
+				exit=1;
+			}
+			else
+				sendBadResponse();
+		}
+		else
+			if(result == PACKET_BAD)
+			{
+				sendBadPacket();
+			}
+			else
+				if(result == PACKET_CHECKSUM_BAD)
+					sendBadChecksum();
+	} // !exit
+}
+
+void handlePacket(TPacket *packet)
+{
+	switch(packet->packetType)
+	{
+		case PACKET_TYPE_COMMAND:
+			handleCommand(packet);
+			break;
+
+		case PACKET_TYPE_RESPONSE:
+			break;
+
+		case PACKET_TYPE_ERROR:
+			break;
+
+		case PACKET_TYPE_MESSAGE:
+			break;
+
+		case PACKET_TYPE_HELLO:
+			break;
+	}
+}
 
 /*
  * Setup and start codes for external interrupts and 
@@ -270,9 +534,11 @@ void setupEINT()
 // Implement the external interrupt ISRs below.
 // INT0 ISR should call leftISR while INT1 ISR
 // should call rightISR.
-
+// TODO: Implement adjustments during interrupts
 ISR (INT0_vect) {
 	leftISR();
+	if (getAdjustReadings() == NEED_ADJUST_LEFT) adjustLeft(100);
+	else adjustRight(100);
 }
 
 ISR (INT1_vect) {
@@ -336,11 +602,11 @@ void writeSerial(const char *buffer, int len)
 // to drive the motors.
 void setupMotors()
 {
-	/* Our motor set up is:  
-	 *    A1IN - Pin 5, PD5, OC0B
-	 *    A2IN - Pin 6, PD6, OC0A
-	 *    B1IN - Pin 10, PB2, OC1B
-	 *    B2In - pIN 11, PB3, OC2A
+	/* Our motor set up is:	 
+	 *	  A1IN - Pin 5, PD5, OC0B
+	 *	  A2IN - Pin 6, PD6, OC0A
+	 *	  B1IN - Pin 10, PB2, OC1B
+	 *	  B2In - pIN 11, PB3, OC2A
 	 */
 }
 
@@ -373,6 +639,9 @@ void forward(float dist, float speed)
 {
 	// Set the direction of travel
 	dir = FORWARD;
+	
+	// Set current speed
+	currentSpeed = speed;
 
 	int val = pwmVal(speed);
 
@@ -380,10 +649,6 @@ void forward(float dist, float speed)
 	if (dist > 0) deltaDist = dist;
 	else deltaDist = 9999999;
 	newDist = forwardDist + deltaDist;
-
-	// For now we will ignore dist and move
-	// forward indefinitely. We will fix this
-	// in Week 9.
 
 	// LF = Left forward pin, LR = Left reverse pin
 	// RF = Right forward pin, RR = Right reverse pin
@@ -404,6 +669,9 @@ void reverse(float dist, float speed)
 {
 	// Set the direction of travel
 	dir = BACKWARD;
+	
+	// Set current speed
+	currentSpeed = speed;
 
 	int val = pwmVal(speed);
 	
@@ -411,10 +679,6 @@ void reverse(float dist, float speed)
 	if (dist > 0) deltaDist = dist;
 	else deltaDist = 9999999;
 	newDist = reverseDist + deltaDist;
-
-	// For now we will ignore dist and 
-	// reverse indefinitely. We will fix this
-	// in Week 9.
 
 	// LF = Left forward pin, LR = Left reverse pin
 	// RF = Right forward pin, RR = Right reverse pin
@@ -451,8 +715,6 @@ void left(float ang, float speed)
 	else deltaTicks=computeDeltaTicks(ang); 
 	targetTicks = leftReverseTicksTurns + deltaTicks;
 
-	// For now we will ignore ang. We will fix this in Week 9.
-	// We will also replace this code with bare-metal later.
 	// To turn left we reverse the left wheel and move
 	// the right wheel forward.
 	analogWrite(LR, val);
@@ -478,14 +740,61 @@ void right(float ang, float speed)
 	else deltaTicks=computeDeltaTicks(ang); 
 	targetTicks = rightReverseTicksTurns + deltaTicks;
 
-	// For now we will ignore ang. We will fix this in Week 9.
-	// We will also replace this code with bare-metal later.
 	// To turn right we reverse the right wheel and move
 	// the left wheel forward.
 	analogWrite(RR, val);
 	analogWrite(LF, val);
 	analogWrite(LR, 0);
 	analogWrite(RF, 0);
+}
+
+// Adjust Vincent left given degree of adjust
+// TODO: Figure out the way to compute the degree of adjustment
+void adjustLeft(float increment) 
+{
+	// Set the direction of travel
+	dir = LEFT;
+	
+	// Compute the PWM values for Left-Forward and Right-Forward
+	// wheel directions. The Right-Forward is greater than
+	// Left-Forward with the difference depended on degree of
+	// adjustment
+	int leftVal = pwmVal(currentSpeed);
+	int rightVal = pwmVal(currentSpeed + increment);
+	
+	analogWrite(LF, leftVal);
+	analogWrite(RF, rightVal);
+	analogWrite(LR, 0);
+	analogWrite(RR, 0);
+}
+
+// Adjust Vincent right given degree of adjust
+// TODO: Figure out the way to compute the degree of adjustment
+void adjustRight(float increment) 
+{
+	// Set the direction of travel
+	dir = RIGHT;
+	
+	// Compute the PWM values for Left-Forward and Right-Forward
+	// wheel directions. The Left-Forward is greater than
+	// Right-Forward with the difference depended on degree of
+	// adjustment
+	int rightVal = pwmVal(currentSpeed);
+	int leftVal = pwmVal(currentSpeed + increment);
+	
+	// Write the values to motors
+	analogWrite(RF, rightVal);
+	analogWrite(LF, leftVal);
+	analogWrite(RR, 0);
+	analogWrite(LR, 0);
+}
+
+// Determine if Vincent requires left/right adjustment by checking
+// external sensor readings
+// (RIGHT NOW USING IR SENSOR)
+int getAdjustReadings()
+{
+	return NEED_ADJUST_LEFT;
 }
 
 // Stop Vincent. To replace with bare-metal code later.
@@ -526,200 +835,18 @@ void clearOneCounter(int which)
 {
 	clearCounters();
 }
-// Intialize Vincet's internal states
+// Initialize Vincent's internal states
 
 void initializeState()
 {
 	clearCounters();
 }
 
-void handleCommand(TPacket *command)
-{
-	switch(command->command)
-	{
-		// For movement commands, param[0] = distance, param[1] = speed.
-		case COMMAND_FORWARD:
-			sendOK();
-			forward((float) command->params[0], (float) command->params[1]);
-			break;
-		case COMMAND_REVERSE:
-			sendOK();
-			reverse((float) command->params[0], (float) command->params[1]);
-			break;
-		case COMMAND_TURN_LEFT:
-			sendOK();
-			left((float) command->params[0], (float) command->params[1]);
-			break;
-		case COMMAND_TURN_RIGHT:
-			sendOK();
-			right((float) command->params[0], (float) command->params[1]);
-			break;
-		case COMMAND_STOP:
-			sendOK();
-			stop();
-			break;
-		case COMMAND_GET_STATS:
-			sendStatus();
-			break;
-		case COMMAND_CLEAR_STATS:
-			sendOK();
-			clearOneCounter(command->params[0]);
-			break;
-		default:
-			sendBadCommand();
-	}
-}
-
-void waitForHello()
-{
-	int exit=0;
-
-	while(!exit)
-	{
-		TPacket hello;
-		TResult result;
-
-		do
-		{
-			result = readPacket(&hello);
-		} while (result == PACKET_INCOMPLETE);
-
-		if(result == PACKET_OK)
-		{
-			if(hello.packetType == PACKET_TYPE_HELLO)
-			{
-
-
-				sendOK();
-				exit=1;
-			}
-			else
-				sendBadResponse();
-		}
-		else
-			if(result == PACKET_BAD)
-			{
-				sendBadPacket();
-			}
-			else
-				if(result == PACKET_CHECKSUM_BAD)
-					sendBadChecksum();
-	} // !exit
-}
-
 // Light up red led for debugging
-void lightRed() {
+void lightRed() 
+{
 	PORTD |= 0b00010000;
 	delay(500);
 	PORTD &= 0b11101111;
 	delay(500);
-}
-
-void setup() {
-
-	// Setup PD4 as output pin for red led lighting
-	DDRD |= 0b00010000;
-
-	cli();
-	setupEINT();
-	setupSerial();
-	startSerial();
-	setupMotors();
-	startMotors();
-	enablePullups();
-	initializeState();
-	sei();
-	
-	// Compute Vincent's diagonal and circumference
-	vincentDiagonal = sqrt((VINCENT_LENGTH * VINCENT_LENGTH) 
-		+ (VINCENT_BREADTH * VINCENT_BREADTH)); 
-	vincentCirc = PI * vincentDiagonal;
-}
-
-void handlePacket(TPacket *packet)
-{
-	switch(packet->packetType)
-	{
-		case PACKET_TYPE_COMMAND:
-			handleCommand(packet);
-			break;
-
-		case PACKET_TYPE_RESPONSE:
-			break;
-
-		case PACKET_TYPE_ERROR:
-			break;
-
-		case PACKET_TYPE_MESSAGE:
-			break;
-
-		case PACKET_TYPE_HELLO:
-			break;
-	}
-}
-
-void loop() {
-	
-	// Check when Vincent can stop moving forward/backward after
-	// it is given a fixed distance to move forward/backward
-	if (deltaDist > 0) {
-		if (dir == FORWARD) {
-			if (forwardDist > newDist) {
-				deltaDist = 0;
-				newDist = 0;
-				stop();
-			}
-		}
-		else if (dir == BACKWARD) {
-			if (reverseDist > newDist) {
-				deltaDist = 0;
-				newDist = 0;
-				stop();
-			}
-		}
-		else if (dir == STOP) {
-			deltaDist = 0;
-			newDist = 0;
-			stop();
-		}
-	}
-		
-	// Check when Vincent can stop turning left/right after
-	// it is given a fixed angle to turn left/right
-	if (deltaTicks > 0) {
-		if (dir == LEFT) {
-			if (leftReverseTicksTurns >= targetTicks) {
-				deltaTicks = 0;
-				targetTicks = 0;
-				stop();
-			}
-		}
-		else if (dir == RIGHT) {
-			if (rightReverseTicksTurns >= targetTicks) {
-				deltaTicks = 0;
-				targetTicks = 0;
-				stop();
-			}
-		}
-		else if (dir == STOP) {
-			deltaTicks = 0;
-			targetTicks = 0;
-			stop();
-		}
-	}
-	
-	// Retrieve packets from RasPi and handle them
-	TPacket recvPacket; // This holds commands from the Pi
-	TResult result = readPacket(&recvPacket);
-	if(result == PACKET_OK)
-		handlePacket(&recvPacket);
-	else
-		if(result == PACKET_BAD)
-		{
-			sendBadPacket();
-		}
-		else
-			if(result == PACKET_CHECKSUM_BAD)
-				sendBadChecksum();
-				
 }
