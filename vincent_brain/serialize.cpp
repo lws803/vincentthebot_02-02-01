@@ -4,7 +4,7 @@
 
 #include "serialize.h"
 
-#define MAGIC_NUMBER				0xFCFDFEFF
+#define MAGIC_NUMBER 0xFCFDFEFF
 
 /* Data size is 4 + 128 + 4 + 1 = 137 bytes. We pad to 140 bytes as this is the nearest divisible by 4 we have. So 
 	 we add 3 bytes */
