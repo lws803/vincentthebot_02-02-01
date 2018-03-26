@@ -15,11 +15,24 @@
 #define MAX 4000
 
 
-
-int height = 0, width = 0;
-
 using namespace std;
 using namespace ros;
+
+
+int height = 0, width = 0;
+int curr_x = 0, curr_y = 0;
+map<double, coords_t*> open; // Use this map to store coords_t and its f_cost, acts as a PQ
+list<coords_t*> closed;
+set<pair<int, int > > visited;
+
+// Params to set
+int probability = 4;
+int mode = 1; // 0 means manhattan distance, 1 means cartesian distance
+// Need to juggle between the two, sometimes its actually better to use this
+// Manhattan distance cannot travel diagonally
+
+NodeHandle n;
+
 
 class coords_t {
 public:
@@ -43,9 +56,6 @@ public:
 };
 
 
-map<double, coords_t*> open; // Use this map to store coords_t and its f_cost, acts as a PQ
-list<coords_t*> closed;
-set<pair<int, int > > visited;
 
 double cartesian_count (int x, int y, int x_target, int y_target) {
     double difference_x = x - x_target;
@@ -126,15 +136,10 @@ int pathfinder (coords_t * start, coords_t * end, int8_t maze[][MAX]) {
 
 
 // Modify this to provide way point management, if no waypoint, then it will stop and wait
-void start_end_scan (coords_t *start, coords_t *end, int8_t maze[][MAX]) {
-    // cout << "Enter start and end coords" << endl;
-    // cout << "start: ";
-    // cin >> start->x >> start->y;
-    // cout << "end: ";
-    // cin >> end->x >> end->y;
-    
+void start_end_scan (coords_t *start, coords_t *end, int8_t maze[][MAX]) {    
     // Dummy values 
-    start->x = 1; start->y = 1;
+
+    start->x = curr_x; start->y = curr_y;
     end->x = 10; end->y = 10;
     
     start->g_cost = 0;
@@ -161,13 +166,6 @@ int find_heading (coords_t * start, int8_t maze[][MAX]) {
     }
     return -1;
 }
-
-
-// Params to set
-int probability = 4;
-int mode = 1; // 0 means manhattan distance, 1 means cartesian distance
-// Need to juggle between the two, sometimes its actually better to use this
-// Manhattan distance cannot travel diagonally
 
 
 // TODO: Get map meta data here too from a global variable 
@@ -215,9 +213,6 @@ void generate_path (int maze[][MAX]) {
 }
 
 
-NodeHandle n;
-
-
 void map_callback(const nav_msgs::OccupancyGrid::ConstPtr& data)
 {
     // Receive data here
@@ -234,15 +229,22 @@ void map_meta_data_callback (const nav_msgs::MapMetaData::ConstPtr& data) {
 	width = data->width;
 }
 
+void pose_data_callback (const nav_msgs::MapMetaData::ConstPtr& data) {
+    // TODO: might need to import geometry_msgs/Pose.h
+    curr_x = data->Point.x;
+    curr_y = data->Point.y;
+}
+
 
 
 int main(int argc, char **argv){
-    init(argc, argv, "front_cam");
+    init(argc, argv, "nav_stack");
+
     
     
     Subscriber sub = n.subscribe("/map", 1, map_callback); // This will call A* itself and control the systems  
     Subscriber sub2 = n.subscribe("/map_metadata", 1, map_meta_data_callback); // This will update global map metadata
-    // TODO: Add another subscriber to handle slam_out_pose 
+    Subscriber sub3 = n.subscribe("/slam_out_pose", 1, pose_data_callback); // This will update global map metadata
 
 
     spin();
