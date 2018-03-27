@@ -384,7 +384,37 @@ void processCommands(int currentHeading, int nextHeading,
 	// If Vincent is moving forward/backward, we specify the distance
 	// based on the gridSteps.
 	// TODO: Algorithm WRONG, correct it
-	if (complementAngle < 180) {
+	
+	
+	/*
+		// We can use -180 < x <= 180 (degrees) 
+		// with negative going left, positive going right 
+		
+		float turnAngle = nextHeading-currentHeading;
+		
+		if (turnAngle > 180)
+			turnAngle -= 360;
+		else if (turnAngle < -180)
+			turnAngle += 360;
+		
+		if (turnAngle > 0) {
+			commandPacket.command = COMMAND_TURN_RIGHT;
+			commandPacket.params[0] = turnAngle;		
+		} else if (turnAngle < 0) {
+			commandPacket.command = COMMAND_TURN_LEFT;
+			commandPacket.params[0] = turnAngle;
+		} else if (turnAngle == -180 || turnAngle == 180){
+			commandPacket.command = COMMAND_REVERSE;
+			commandPacket.params[0] = moveDistance;
+		} else {
+			commandPacket.command = COMMAND_FORWARD;
+			commandPacket.params[0] = moveDistance;	
+		}
+		
+		commandPacket.params[1] = DEFAULT_SPEED;
+	*/
+	
+	if (complementAngle > 180) {
 		// Vincent needs to turn right
 		turnAngle = 360 - complementAngle;
 		commandPacket.command = COMMAND_TURN_RIGHT;

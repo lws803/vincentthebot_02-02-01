@@ -25,7 +25,9 @@ typedef enum
   RESP_BAD_PACKET = 2,
   RESP_BAD_CHECKSUM = 3,
   RESP_BAD_COMMAND = 4,
-  RESP_BAD_RESPONSE = 5 
+  RESP_BAD_RESPONSE = 5,
+  RESP_OK_AUTO = 6
+  
 } TResponseType;
 
 
@@ -42,7 +44,9 @@ typedef enum
   COMMAND_ADJUST_RIGHT = 5,
   COMMAND_STOP = 6,
   COMMAND_GET_STATS = 7,
-  COMMAND_CLEAR_STATS = 8
+  COMMAND_CLEAR_STATS = 8,
+  COMMAND_AUTO_MODE = 9,
+  COMMAND_REMOTE_MODE = 10
   
 } TCommandType;
 #endif
