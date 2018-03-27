@@ -1,5 +1,6 @@
 #include <serialize.h>
 #include <math.h>
+#include <Wire.h>
 #include "packet.h"
 #include "constants.h"
 
@@ -27,7 +28,7 @@ volatile TDirection dir = STOP;
 // by taking revs * WHEEL_CIRC
 
 #define WHEEL_CIRC 20
-
+#define MAG_address 0x0E
 // Motor control pins. You need to adjust these till
 // Vincent moves in the correct direction
 #define LF 6   // Left forward pin
@@ -36,7 +37,7 @@ volatile TDirection dir = STOP;
 #define RR 10  // Right reverse pin
 
 // PI, for calculating turn circumference
-#define PI 3.141592654
+//#define PI 3.141592654
 
 // Vincent's length and breadth in cm
 #define VINCENT_LENGTH 17.5
@@ -83,6 +84,7 @@ unsigned long newDist;
 // Variables to keep track of our turning angle
 unsigned long deltaTicks;
 unsigned long targetTicks;
+
 
 /*
  * 
@@ -648,8 +650,34 @@ void handlePacket(TPacket *packet)
 	}
 }
 
+void MAG(int *x, int *y, int *z)
+{
+  //Tell the HMC5883 where to begin reading data
+  Wire.beginTransmission(MAG_address);
+  Wire.write((byte)0x03); //select register 3, X MSB register
+  Wire.endTransmission();
+   
+ //Read data from each axis, 2 registers per axis
+  Wire.requestFrom(MAG_address, 6);
+  if(6<=Wire.available()){
+    *x = Wire.read() << 8; //X msb
+    *x |= Wire.read();     //X lsb
+    *z = Wire.read() << 8; //Z msb
+    *z |= Wire.read();     //Z lsb
+    *y = Wire.read() << 8; //Y msb
+    *y |= Wire.read();     //Y lsb
+  }
+  else{   //return 0 value when data is unavailable or component is unplugged or malfuntioning
+    *x=0;
+    *y=0;
+    *z=0;
+  }
+}
+
 void loop() {
-	
+  static int MAG_x, MAG_y, MAG_z;
+  MAG(&MAG_x, &MAG_y, &MAG_z);
+  
 	// Check when Vincent can stop moving forward/backward after
 	// it is given a fixed distance to move forward/backward
 	if (deltaDist > 0) {
