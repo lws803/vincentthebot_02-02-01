@@ -11,8 +11,84 @@
 #define PORT_NAME			"/dev/ttyACM0"
 #define BAUD_RATE			B9600
 
+// Defined constants to indicate directions, distance and speed
+#define DEFAULT_SPEED 100 // Default move/turn speed
+#define GRID_UNIT_DISTANCE 20 // Assume grid unit distance to be wheel circumference
+
+/*
+ * Global Variables
+ */
 int exitFlag=0;
 sem_t _xmitSema;
+// Keep track of autonomous mode
+bool AUTONOMOUS_FLAG = false;
+
+/*
+ * Function prototypes
+ */
+// Handling packets and errors
+void handleError(TResult error);
+void handleStatus(TPacket *packet);
+void handleResponse(TPacket *packet);
+void handleErrorResponse(TPacket *packet);
+void handleMessage(TPacket *packet);
+void handlePacket(TPacket *packet);
+void sendPacket(TPacket *packet);
+void *receiveThread(void *p);
+// Process MANUAL commands
+void flushInput();
+void getParams(TPacket *commandPacket);
+void sendCommand(char command);
+// Process AUTONOMOUS commands
+void processCommands(int currentHeading, int nextHeading, 
+	int gridSteps);
+
+/*
+ * Main program
+ */
+int main()
+{
+	// Connect to the Arduino
+	startSerial(PORT_NAME, BAUD_RATE, 8, 'N', 1, 5);
+
+	// Sleep for two seconds
+	printf("WAITING TWO SECONDS FOR ARDUINO TO REBOOT\n");
+	sleep(2);
+	printf("DONE\n");
+
+	// Spawn receiver thread
+	pthread_t recv;
+
+	pthread_create(&recv, NULL, receiveThread, NULL);
+
+	// Send a hello packet
+	TPacket helloPacket;
+
+	helloPacket.packetType = PACKET_TYPE_HELLO;
+	sendPacket(&helloPacket);
+
+	while(!exitFlag)
+	{
+		if (AUTONOMOUS_FLAG) {
+			// Continuously process autonomous commands
+			processCommands(0, 0, 0);
+		}
+		else {
+			// Get input from controller
+			char ch;
+			printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
+			scanf("%c", &ch);
+
+			// Purge extraneous characters from input stream
+			flushInput();
+
+			sendCommand(ch);
+		}
+	}
+
+	printf("Closing connection to Arduino.\n");
+	endSerial();
+}
 
 void handleError(TResult error)
 {
@@ -238,39 +314,68 @@ void sendCommand(char command)
 	}
 }
 
-int main()
-{
-	// Connect to the Arduino
-	startSerial(PORT_NAME, BAUD_RATE, 8, 'N', 1, 5);
-
-	// Sleep for two seconds
-	printf("WAITING TWO SECONDS FOR ARDUINO TO REBOOT\n");
-	sleep(2);
-	printf("DONE\n");
-
-	// Spawn receiver thread
-	pthread_t recv;
-
-	pthread_create(&recv, NULL, receiveThread, NULL);
-
-	// Send a hello packet
-	TPacket helloPacket;
-
-	helloPacket.packetType = PACKET_TYPE_HELLO;
-	sendPacket(&helloPacket);
-
-	while(!exitFlag)
-	{
-		char ch;
-		printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
-		scanf("%c", &ch);
-
-		// Purge extraneous characters from input stream
-		flushInput();
-
-		sendCommand(ch);
+/*
+ * Retrieve navigation commands from RPiLidar and process them
+ * before sending corresponding movement commands to Arduino
+ * 
+ * Current heading reports the current direction Vincent is facing,
+ * where 0 <= currentHeading <= 359
+ * 
+ * Heading determines the direction of travel for Vincent, where
+ * 0 <= nextHeading <= 359
+ * 
+ * Grid steps is the number of steps, with reference to the GRID in the
+ * navigation map, Vincent is required to move. This determines the 
+ */
+void processCommands(int currentHeading, int nextHeading, 
+	int gridSteps) {
+	// Command packet to be sent to Arduino
+	TPacket commandPacket;
+	commandPacket.packetType = PACKET_TYPE_COMMAND;
+		
+	// First, Vincent needs to determine the direction of based on the
+	// given heading
+	float complementAngle = abs((float) nextHeading - currentHeading);
+	float turnAngle = 0;
+	// Next, Vincent determines the movement distance if required
+	float moveDistance = 0;
+	if (gridSteps > 0) {
+		 moveDistance = gridSteps * GRID_UNIT_DISTANCE; 
 	}
-
-	printf("Closing connection to Arduino.\n");
-	endSerial();
+	
+	// If the complement is more than 180, we know that
+	// Vincent needs to turn right. Else, Vincent will turn left.
+	// For convenient cases such as resultant angle = 0, 90, 180, 270,
+	// Vincent will move forward/backward/left(90deg)/right(90deg)
+	// If Vincent is moving forward/backward, we specify the distance
+	// based on the gridSteps.
+	if (complementAngle > 180) {
+		// Vincent needs to turn right
+		turnAngle = 360 - complementAngle;
+		commandPacket.command = COMMAND_TURN_RIGHT;
+		commandPacket.params[0] = turnAngle;
+		commandPacket.params[1] = DEFAULT_SPEED;
+	}
+	else if (complementAngle < 180) {
+		// Vincent needs to turn left
+		turnAngle = complementAngle;
+		commandPacket.command = COMMAND_TURN_LEFT;
+		commandPacket.params[0] = turnAngle;
+		commandPacket.params[1] = DEFAULT_SPEED;
+	}
+	else if (complementAngle == 180) {
+		// Vincent needs to reverse
+		commandPacket.command = COMMAND_REVERSE;
+		commandPacket.params[0] = moveDistance;
+		commandPacket.params[1] = DEFAULT_SPEED;
+	}
+	else {
+		// Vincent continues forward
+		commandPacket.command = COMMAND_FORWARD;
+		commandPacket.params[0] = moveDistance;
+		commandPacket.params[1] = DEFAULT_SPEED;
+	}
+	
+	// Send the command out to Arduino
+	sendPacket(&commandPacket);
 }

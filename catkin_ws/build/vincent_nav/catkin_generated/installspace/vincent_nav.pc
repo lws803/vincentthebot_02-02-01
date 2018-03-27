@@ -1,0 +1,8 @@
+prefix=/home/vincent/catkin_ws/install
+
+Name: vincent_nav
+Description: Description of vincent_nav
+Version: 0.0.0
+Cflags: 
+Libs: -L/home/vincent/catkin_ws/install/lib 
+Requires: 

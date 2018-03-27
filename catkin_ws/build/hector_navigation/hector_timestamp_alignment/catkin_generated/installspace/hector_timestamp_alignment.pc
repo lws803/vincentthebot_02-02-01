@@ -1,0 +1,8 @@
+prefix=/home/vincent/catkin_ws/install
+
+Name: hector_timestamp_alignment
+Description: Description of hector_timestamp_alignment
+Version: 0.0.0
+Cflags: -I/home/vincent/catkin_ws/install/include
+Libs: -L/home/vincent/catkin_ws/install/lib 
+Requires: 
