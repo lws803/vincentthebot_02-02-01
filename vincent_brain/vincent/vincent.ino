@@ -38,8 +38,8 @@ volatile TDirection dir = STOP;
 #define NEED_ADJUST_LEFT 0 
 #define NEED_ADJUST_RIGHT 1
 
-// PI, for calculating turn circumference
-#define PI 3.141592654
+// PI, for calculating turn circumference 
+#define PI 3.14159265358979
 
 // Vincent's length and breadth in cm
 #define VINCENT_LENGTH 17.5
@@ -94,6 +94,9 @@ float currentSpeed;
 
 // Variable to store heading
 double heading;
+
+// Store current Vincent mode (default as remote)
+bool isAuto = false;
 
 /* 
  *
@@ -176,7 +179,8 @@ void setup() {
   
   // Compute Vincent's diagonal and circumference
   vincentDiagonal = sqrt((VINCENT_LENGTH * VINCENT_LENGTH) 
-    + (VINCENT_BREADTH * VINCENT_BREADTH)); 
+    + (VINCENT_BREADTH * VINCENT_BREADTH));
+
   vincentCirc = PI * vincentDiagonal;
 }
 
@@ -237,20 +241,39 @@ void loop() {
       stop();
     }
   }
+
+  
   
   // Retrieve packets from RasPi and handle them
   TPacket recvPacket; // This holds commands from the Pi
   TResult result = readPacket(&recvPacket);
-  if(result == PACKET_OK)
-    handlePacket(&recvPacket);
-  else
-    if(result == PACKET_BAD)
-    {
-      sendBadPacket();
+
+  // Handle packets differently if autonomous or remote
+  if (isAuto) {
+    if (result == PACKET_AUTO_OK) {
+      handlePacket(&recvPacket);
+    } else {
+      if (result == PACKET_BAD) {
+        sendBadPacket();
+      } else {
+        if (result == PACKET_CHECKSUM_BAD)
+          sendBadChecksum();
+      }
     }
+     
+  } else {
+    if(result == PACKET_OK)
+      handlePacket(&recvPacket);
     else
-      if(result == PACKET_CHECKSUM_BAD)
-        sendBadChecksum();
+      if(result == PACKET_BAD)
+      {
+        sendBadPacket();
+      }
+      else
+        if(result == PACKET_CHECKSUM_BAD)
+          sendBadChecksum();
+  }
+  
         
 }
 
@@ -265,6 +288,7 @@ TResult readPacket(TPacket *packet)
   // Reads in data from the serial port and
   // deserializes it.Returns deserialized
   // data in "packet".
+  // We would need to declare the deserialize function
 
   char buffer[PACKET_SIZE];
   int len;
@@ -367,6 +391,13 @@ void sendOK()
   sendResponse(&okPacket);  
 }
 
+void sendOKAuto() {
+  TPacket autoOKPacket;
+  autoOKPacket.packetType = PACKET_TYPE_RESPONSE;
+  autoOKPacket.command = RESP_OK_AUTO;
+  sendResponse(&autoOKPacket);
+}
+
 void sendResponse(TPacket *packet)
 {
   // Takes a packet, serializes it then sends it out
@@ -419,6 +450,14 @@ void handleCommand(TPacket *command)
     case COMMAND_CLEAR_STATS:
       sendOK();
       clearOneCounter(command->params[0]);
+      break;
+    case COMMAND_AUTO_MODE:
+      isAuto = true;
+      sendOKAuto();
+      break;
+    case COMMAND_REMOTE_MODE:
+      isAuto = false;
+      sendOK();
       break;
     default:
       sendBadCommand();
@@ -475,7 +514,7 @@ void handlePacket(TPacket *packet)
 
     case PACKET_TYPE_ERROR:
       break;
-
+ 
     case PACKET_TYPE_MESSAGE:
       break;
 
