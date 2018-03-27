@@ -95,6 +95,9 @@ float currentSpeed;
 // Variable to store heading
 double heading;
 
+// Variables to track autonomous states
+volatile AUTONOMOUS_FLAG;
+
 /* 
  *
  *  ALL function prototypes
@@ -481,6 +484,10 @@ void handlePacket(TPacket *packet)
 
     case PACKET_TYPE_HELLO:
       break;
+     
+    case PACKET_TYPE_AUTO:
+		AUTONOMOUS_FLAG = true;
+		break;
   }
 }
 

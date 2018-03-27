@@ -20,8 +20,12 @@
  */
 int exitFlag=0;
 sem_t _xmitSema;
-// Keep track of autonomous mode
-bool AUTONOMOUS_FLAG = false;
+// Keep track of autonomous mode routine
+volatile bool AUTONOMOUS_FLAG = false;
+volatile bool AUTO_RECEIVE_OK = false;
+volatile int currentHeading = 0;
+volatile int nextHeading = 0;
+volatile int gridSteps = 0;
 
 /*
  * Function prototypes
@@ -66,17 +70,31 @@ int main()
 
 	helloPacket.packetType = PACKET_TYPE_HELLO;
 	sendPacket(&helloPacket);
+	
+	// Autonomous packet
+	TPacket autoPacket;
+	autoPacket.packetType = PACKET_TYPE_AUTO;
 
 	while(!exitFlag)
 	{
 		if (AUTONOMOUS_FLAG) {
 			// Continuously process autonomous commands
-			processCommands(0, 0, 0);
+			// Inform Arduino incoming autonomous packet
+			sendPacket(&autoPacket);
+			if (AUTO_RECEIVE_OK) {
+				// Process the next command
+				processCommands(currentHeading, nextHeading, gridSteps);
+				//getLidarData(&currentHeading, &nextHeading, &gridSteps);
+			}
+			else {
+				// Re-process the current failed command
+				processCommands(currentHeading, nextHeading, gridSteps);
+			}
 		}
 		else {
 			// Get input from controller
 			char ch;
-			printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
+			printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats, a=autonomous mode, q=exit)\n");
 			scanf("%c", &ch);
 
 			// Purge extraneous characters from input stream
@@ -123,6 +141,7 @@ void handleStatus(TPacket *packet)
 	printf("\n---------------------------------------\n\n");
 }
 
+// TODO: Sync with James' respone code from Arduino
 void handleResponse(TPacket *packet)
 {
 	// The response code is stored in command
@@ -135,6 +154,14 @@ void handleResponse(TPacket *packet)
 		case RESP_STATUS:
 			handleStatus(packet);
 		break;
+
+		case RESP_AUTO_OK:
+			printf("AUTONOMOUS Command OK");
+			AUTO_RECEIVE_OK = true;
+			
+		case RESP_AUTO_BAD:
+			printf("AUTONOMOUS Command BAD");
+			AUTO_RECEIVE_BAD = false;
 
 		default:
 			printf("Arduino is confused\n");
@@ -302,6 +329,13 @@ void sendCommand(char command)
 			commandPacket.command = COMMAND_GET_STATS;
 			sendPacket(&commandPacket);
 			break;
+		
+		case 'a':
+		case 'A':
+			AUTONOMOUS_FLAG = true;
+			//getLidarData(&currentHeading, &nextHeading, &gridSteps);
+			printf("Switching to AUTONOMOUS mode...");
+			break;
 
 		case 'q':
 		case 'Q':
@@ -349,14 +383,15 @@ void processCommands(int currentHeading, int nextHeading,
 	// Vincent will move forward/backward/left(90deg)/right(90deg)
 	// If Vincent is moving forward/backward, we specify the distance
 	// based on the gridSteps.
-	if (complementAngle > 180) {
+	// TODO: Algorithm WRONG, correct it
+	if (complementAngle < 180) {
 		// Vincent needs to turn right
 		turnAngle = 360 - complementAngle;
 		commandPacket.command = COMMAND_TURN_RIGHT;
 		commandPacket.params[0] = turnAngle;
 		commandPacket.params[1] = DEFAULT_SPEED;
 	}
-	else if (complementAngle < 180) {
+	else if (complementAngle > 180) {
 		// Vincent needs to turn left
 		turnAngle = complementAngle;
 		commandPacket.command = COMMAND_TURN_LEFT;
