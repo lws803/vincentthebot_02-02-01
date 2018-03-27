@@ -26,7 +26,6 @@ volatile TDirection dir = STOP;
 // We will use this to calculate forward/backward distance travelled 
 // by taking revs * WHEEL_CIRC
 #define WHEEL_CIRC 20.4
-#define MAG_address 0x0E
 
 // Motor control pins. You need to adjust these till
 // Vincent moves in the correct direction
@@ -40,11 +39,13 @@ volatile TDirection dir = STOP;
 #define NEED_ADJUST_RIGHT 1
 
 // PI, for calculating turn circumference
-//#define PI 3.141592654
+#define PI 3.141592654
 
 // Vincent's length and breadth in cm
 #define VINCENT_LENGTH 17.5
 #define VINCENT_BREADTH 11
+
+#define MAG_address 0x0E
 
 // Vincent's diagonal. We compute and store this once
 // since it is expensive to compute and really doesn't change
@@ -52,8 +53,6 @@ float vincentDiagonal = 0.0;
 
 // Vincent's turning circumference, calculated once
 float vincentCirc = 0.0;
-
-float currentSpeed;
 
 /*
  *    Vincent's State Variables
@@ -89,6 +88,171 @@ unsigned long newDist;
 // Variables to keep track of our turning angle
 unsigned long deltaTicks;
 unsigned long targetTicks;
+
+// Variables to keep track of current speed
+float currentSpeed;
+
+// Variable to store heading
+double heading;
+
+/* 
+ *
+ *  ALL function prototypes
+ *
+ */
+// Handle ongoing communications
+TResult readPacket(TPacket *packet);
+void sendStatus();
+void sendMessage(const char *message);
+void sendBadPacket();
+void sendBadChecksum();
+void sendBadCommand();
+void sendBadResponse();
+void sendOK();
+void sendResponse(TPacket *packet);
+void handleCommand(TPacket *command);
+void waitForHello();
+void handlePacket(TPacket *packet);
+
+// Set up interrupts
+void enablePullups();
+void leftISR();
+void rightISR();
+void setupEINT();
+ISR (INT0_vect);
+ISR (INT1_vect);
+
+// Set up serial communications
+void setupSerial();
+void startSerial();
+int readSerial(char *buffer);
+void writeSerial(const char *buffer, int len);
+
+// Start the motors
+void setupMotors();
+int pwmVal(float speed);
+void forward(float dist, float speed);
+void reverse(float dist, float speed);
+unsigned long computeDeltaTicks(float ang);
+void left(float ang, float speed);
+void right(float ang, float speed);
+void adjustLeft(float increment);
+void adjustRight(float increment);
+int getAdjustReadings();
+void stop();
+
+// Handle the statistics
+void clearCounters();
+void clearOneCounter(int which);
+void initializeState();
+
+//MAG3110
+void MAG(int*, int*, int*);
+
+// Debugging
+void lightRed();
+
+
+
+/*
+ *
+ * Setup Arduino
+ *
+ */
+void setup() {
+
+  // Setup PD4 as output pin for red led lighting
+  DDRD |= 0b00010000;
+
+  cli();
+  setupEINT();
+  setupSerial();
+  startSerial();
+  setupMotors();
+  startMotors();
+  enablePullups();
+  initializeState();
+  sei();
+  
+  // Compute Vincent's diagonal and circumference
+  vincentDiagonal = sqrt((VINCENT_LENGTH * VINCENT_LENGTH) 
+    + (VINCENT_BREADTH * VINCENT_BREADTH)); 
+  vincentCirc = PI * vincentDiagonal;
+}
+
+/*
+ *
+ * Continuous loop
+ *
+ */
+void loop() {
+  int MAG_x, MAG_y, MAG_z;
+  MAG(&MAG_x, &MAG_y, &MAG_z);
+  heading = atan2((double)MAG_y,(double)MAG_x);
+  
+  // Check when Vincent can stop moving forward/backward after
+  // it is given a fixed distance to move forward/backward
+  if (deltaDist > 0) {
+    if (dir == FORWARD) {
+      if (forwardDist > newDist) {
+        deltaDist = 0;
+        newDist = 0;
+        stop();
+      }
+    }
+    else if (dir == BACKWARD) {
+      if (reverseDist > newDist) {
+        deltaDist = 0;
+        newDist = 0;
+        stop();
+      }
+    }
+    else if (dir == STOP) {
+      deltaDist = 0;
+      newDist = 0;
+      stop();
+    }
+  }
+    
+  // Check when Vincent can stop turning left/right after
+  // it is given a fixed angle to turn left/right
+  if (deltaTicks > 0) {
+    if (dir == LEFT) {
+      if (leftReverseTicksTurns >= targetTicks) {
+        deltaTicks = 0;
+        targetTicks = 0;
+        stop();
+      }
+    }
+    else if (dir == RIGHT) {
+      if (rightReverseTicksTurns >= targetTicks) {
+        deltaTicks = 0;
+        targetTicks = 0;
+        stop();
+      }
+    }
+    else if (dir == STOP) {
+      deltaTicks = 0;
+      targetTicks = 0;
+      stop();
+    }
+  }
+  
+  // Retrieve packets from RasPi and handle them
+  TPacket recvPacket; // This holds commands from the Pi
+  TResult result = readPacket(&recvPacket);
+  if(result == PACKET_OK)
+    handlePacket(&recvPacket);
+  else
+    if(result == PACKET_BAD)
+    {
+      sendBadPacket();
+    }
+    else
+      if(result == PACKET_CHECKSUM_BAD)
+        sendBadChecksum();
+        
+}
 
 /*
  * 
@@ -212,6 +376,112 @@ void sendResponse(TPacket *packet)
   
   len = serialize(buffer, packet, sizeof(TPacket));
   writeSerial(buffer, len);
+}
+
+void handleCommand(TPacket *command)
+{
+  switch(command->command)
+  {
+    // For forward/reverse commands, param[0] = distance, param[1] = speed.
+    // For turn left/right commands, param[0] = angle, param[1] = speed;
+    // For adjust left/right commands, param[0] = increment;
+    case COMMAND_FORWARD:
+      sendOK();
+      forward((float) command->params[0], (float) command->params[1]);
+      break;
+    case COMMAND_REVERSE:
+      sendOK();
+      reverse((float) command->params[0], (float) command->params[1]);
+      break;
+    case COMMAND_TURN_LEFT:
+      sendOK();
+      left((float) command->params[0], (float) command->params[1]);
+      break;
+    case COMMAND_TURN_RIGHT:
+      sendOK();
+      right((float) command->params[0], (float) command->params[1]);
+      break;
+    case COMMAND_ADJUST_LEFT:
+      sendOK();
+      adjustLeft((float) command->params[0]);
+      break;
+    case COMMAND_ADJUST_RIGHT:
+      sendOK();
+      adjustRight((float) command->params[0]);
+      break;
+    case COMMAND_STOP:
+      sendOK();
+      stop();
+      break;
+    case COMMAND_GET_STATS:
+      sendStatus();
+      break;
+    case COMMAND_CLEAR_STATS:
+      sendOK();
+      clearOneCounter(command->params[0]);
+      break;
+    default:
+      sendBadCommand();
+  }
+}
+
+void waitForHello()
+{
+  int exit=0;
+
+  while(!exit)
+  {
+    TPacket hello;
+    TResult result;
+
+    do
+    {
+      result = readPacket(&hello);
+    } while (result == PACKET_INCOMPLETE);
+
+    if(result == PACKET_OK)
+    {
+      if(hello.packetType == PACKET_TYPE_HELLO)
+      {
+
+
+        sendOK();
+        exit=1;
+      }
+      else
+        sendBadResponse();
+    }
+    else
+      if(result == PACKET_BAD)
+      {
+        sendBadPacket();
+      }
+      else
+        if(result == PACKET_CHECKSUM_BAD)
+          sendBadChecksum();
+  } // !exit
+}
+
+void handlePacket(TPacket *packet)
+{
+  switch(packet->packetType)
+  {
+    case PACKET_TYPE_COMMAND:
+      handleCommand(packet);
+      break;
+
+    case PACKET_TYPE_RESPONSE:
+      break;
+
+    case PACKET_TYPE_ERROR:
+      break;
+
+    case PACKET_TYPE_MESSAGE:
+      break;
+
+    case PACKET_TYPE_HELLO:
+      break;
+  }
 }
 
 /*
@@ -556,6 +826,30 @@ void stop()
  * 
  */
 
+
+void MAG(int *x, int *y, int *z) {
+  //Tell the MAg3110 where to begin reading data
+  Wire.beginTransmission(MAG_address);
+  Wire.write((byte)0x03); //select register 3, X MSB register
+  Wire.endTransmission();
+   
+ //Read data from each axis, 2 registers per axis
+  Wire.requestFrom(MAG_address, 6);
+  if(6<=Wire.available()){
+    *x = Wire.read() << 8; //X msb
+    *x |= Wire.read();     //X lsb
+    *z = Wire.read() << 8; //Z msb
+    *z |= Wire.read();     //Z lsb
+    *y = Wire.read() << 8; //Y msb
+    *y |= Wire.read();     //Y lsb
+  }
+  else{   //return 0 value when data is unavailable or component is unplugged or malfuntioning
+    *x=0;
+    *y=0;
+    *z=0;
+  }
+}
+
 // Clears all our counters
 void clearCounters()
 {
@@ -588,207 +882,6 @@ void initializeState()
 // Light up red led for debugging
 void lightRed() 
 {
-  switch(command->command)
-  {
-    // For movement commands, param[0] = distance, param[1] = speed.
-    case COMMAND_FORWARD:
-      sendOK();
-      forward((float) command->params[0], (float) command->params[1]);
-      break;
-    case COMMAND_REVERSE:
-      sendOK();
-      reverse((float) command->params[0], (float) command->params[1]);
-      break;
-    case COMMAND_TURN_LEFT:
-      sendOK();
-      left((float) command->params[0], (float) command->params[1]);
-      break;
-    case COMMAND_TURN_RIGHT:
-      sendOK();
-      right((float) command->params[0], (float) command->params[1]);
-      break;
-    case COMMAND_STOP:
-      sendOK();
-      stop();
-      break;
-    case COMMAND_GET_STATS:
-      sendStatus();
-      break;
-    case COMMAND_CLEAR_STATS:
-      sendOK();
-      clearOneCounter(command->params[0]);
-      break;
-    default:
-      sendBadCommand();
-  }
-}
-
-void waitForHello()
-{
-  int exit=0;
-
-  while(!exit)
-  {
-    TPacket hello;
-    TResult result;
-
-    do
-    {
-      result = readPacket(&hello);
-    } while (result == PACKET_INCOMPLETE);
-
-    if(result == PACKET_OK)
-    {
-      if(hello.packetType == PACKET_TYPE_HELLO)
-      {
-
-
-        sendOK();
-        exit=1;
-      }
-      else
-        sendBadResponse();
-    }
-    else
-      if(result == PACKET_BAD)
-      {
-        sendBadPacket();
-      }
-      else
-        if(result == PACKET_CHECKSUM_BAD)
-          sendBadChecksum();
-  } // !exit
-}
-
-void setup() {
-
-  cli();
-  setupEINT();
-  setupSerial();
-  startSerial();
-  setupMotors();
-  startMotors();
-  enablePullups();
-  initializeState();
-  sei();
-  
-  // Compute Vincent's diagonal and circumference
-  vincentDiagonal = sqrt((VINCENT_LENGTH * VINCENT_LENGTH) 
-    + (VINCENT_BREADTH * VINCENT_BREADTH)); 
-  vincentCirc = PI * vincentDiagonal;
-}
-
-void handlePacket(TPacket *packet)
-{
-  switch(packet->packetType)
-  {
-    case PACKET_TYPE_COMMAND:
-      handleCommand(packet);
-      break;
-
-    case PACKET_TYPE_RESPONSE:
-      break;
-
-    case PACKET_TYPE_ERROR:
-      break;
-
-    case PACKET_TYPE_MESSAGE:
-      break;
-
-    case PACKET_TYPE_HELLO:
-      break;
-  }
-}
-
-void MAG(int *x, int *y, int *z) {
-  //Tell the MAG3110 where to begin reading data
-  Wire.beginTransmission(MAG_address);
-  Wire.write((byte)0x03); //select register 3, X MSB register
-  Wire.endTransmission();
-   
- //Read data from each axis, 2 registers per axis
-  Wire.requestFrom(MAG_address, 6);
-  if(6<=Wire.available()){
-    *x = Wire.read() << 8; //X msb
-    *x |= Wire.read();     //X lsb
-    *z = Wire.read() << 8; //Z msb
-    *z |= Wire.read();     //Z lsb
-    *y = Wire.read() << 8; //Y msb
-    *y |= Wire.read();     //Y lsb
-  }
-  else{   //return 0 value when data is unavailable or component is unplugged or malfuntioning
-    *x=0;
-    *y=0;
-    *z=0;
-  }
-}
-
-void loop() {
-  static int MAG_x, MAG_y, MAG_z;
-  MAG(&MAG_x, &MAG_y, &MAG_z);
-  
-  // Check when Vincent can stop moving forward/backward after
-  // it is given a fixed distance to move forward/backward
-  if (deltaDist > 0) {
-    if (dir == FORWARD) {
-      if (forwardDist > newDist) {
-        deltaDist = 0;
-        newDist = 0;
-        stop();
-      }
-    }
-    else if (dir == BACKWARD) {
-      if (reverseDist > newDist) {
-        deltaDist = 0;
-        newDist = 0;
-        stop();
-      }
-    }
-    else if (dir == STOP) {
-      deltaDist = 0;
-      newDist = 0;
-      stop();
-    }
-  }
-    
-  // Check when Vincent can stop turning left/right after
-  // it is given a fixed angle to turn left/right
-  if (deltaTicks > 0) {
-    if (dir == LEFT) {
-      if (leftReverseTicksTurns >= targetTicks) {
-        deltaTicks = 0;
-        targetTicks = 0;
-        stop();
-      }
-    }
-    else if (dir == RIGHT) {
-      if (rightReverseTicksTurns >= targetTicks) {
-        deltaTicks = 0;
-        targetTicks = 0;
-        stop();
-      }
-    }
-    else if (dir == STOP) {
-      deltaTicks = 0;
-      targetTicks = 0;
-      stop();
-    }
-  }
-  
-  // Retrieve packets from RasPi and handle them
-  TPacket recvPacket; // This holds commands from the Pi
-  TResult result = readPacket(&recvPacket);
-  if(result == PACKET_OK)
-    handlePacket(&recvPacket);
-  else
-    if(result == PACKET_BAD)
-    {
-      sendBadPacket();
-    }
-    else
-      if(result == PACKET_CHECKSUM_BAD)
-        sendBadChecksum();
-
   PORTD |= 0b00010000;
   delay(500);
   PORTD &= 0b11101111;
