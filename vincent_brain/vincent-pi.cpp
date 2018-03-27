@@ -1,4 +1,7 @@
 #include <stdio.h>
+#include <iostream>
+#include <utility>
+#include <tuple>
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
@@ -8,12 +11,17 @@
 #include "serialize.h"
 #include "constants.h"
 
+using namespace std;
+
 #define PORT_NAME			"/dev/ttyACM0"
 #define BAUD_RATE			B9600
 
 // Defined constants to indicate directions, distance and speed
 #define DEFAULT_SPEED 100 // Default move/turn speed
 #define GRID_UNIT_DISTANCE 20 // Assume grid unit distance to be wheel circumference
+// Defined constants for movement command type
+#define MOVE_COMMAND 0 // For forward/backward
+#define TURN_COMMAND 1 // For turning
 
 /*
  * Global Variables
@@ -23,9 +31,23 @@ sem_t _xmitSema;
 // Keep track of autonomous mode routine
 volatile bool AUTONOMOUS_FLAG = false;
 volatile bool AUTO_RECEIVE_OK = false;
-volatile int currentHeading = 0;
-volatile int nextHeading = 0;
-volatile int gridSteps = 0;
+volatile bool AUTO_RECEIVE_BAD = false;
+float currentHeading = 0;
+float nextHeading = 0;
+int gridSteps = 0;
+
+/*
+ * Structures definitions
+ */
+// LIDAR raw data to commands Pair
+// arg 1: Turn command (arg1: direction, arg2: angle)
+// arg 2: Forward/backward command (arg1: direction, arg2: distance)
+typedef pair< pair<string, float> , pair<string, float> > rawDataCommandPair;
+// Execution command tuple
+// arg 1: Command type --> TURN or MOVE
+// arg 2: Direction
+// arg 3: Angle/Distance
+typedef tuple<int, string, float> commandTuple;
 
 /*
  * Function prototypes
@@ -40,12 +62,14 @@ void handlePacket(TPacket *packet);
 void sendPacket(TPacket *packet);
 void *receiveThread(void *p);
 // Process MANUAL commands
+void printInstructions(float *currHead, float *nextHead, int *steps, rawDataCommandPair *pair);
+commandTuple executeUserCommand();
 void flushInput();
-void getParams(TPacket *commandPacket);
-void sendCommand(char command);
-// Process AUTONOMOUS commands
-void processCommands(int currentHeading, int nextHeading, 
-	int gridSteps);
+float getParams(TPacket *commandPacket);
+float sendCommand(char command);
+// Process raw data from LIDAR
+rawDataCommandPair processRawData(float currentHeading, 
+	float nextHeading, int gridSteps);
 
 /*
  * Main program
@@ -83,29 +107,54 @@ int main()
 			sendPacket(&autoPacket);
 			if (AUTO_RECEIVE_OK) {
 				// Process the next command
-				processCommands(currentHeading, nextHeading, gridSteps);
+				//processCommands(currentHeading, nextHeading, gridSteps);
 				//getLidarData(&currentHeading, &nextHeading, &gridSteps);
 			}
 			else {
 				// Re-process the current failed command
-				processCommands(currentHeading, nextHeading, gridSteps);
+				//processCommands(currentHeading, nextHeading, gridSteps);
 			}
 		}
 		else {
-			// Get input from controller
-			char ch;
-			printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats, a=autonomous mode, q=exit)\n");
-			scanf("%c", &ch);
+			// Retrieve raw data from LIDAR
+			//getLidarData(&currentHeading, &nextHeading, &gridSteps);
+			// Process raw data from LIDAR
+			rawDataCommandPair cmdPair = 
+				processRawData(currentHeading, nextHeading, gridSteps);
+			commandTuple inputCmd;
+			
+			// Print the raw data and required command to standard
+			// output
+			printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
+			
+			// TODO: UI mismatch. Reponse is received after printing
+			// the prompt message. Hence, response message gets printed
+			// AFTER prompt message. FIX THIS.
+			
+			// We only need to process one command, forward/backward
+			if (get<1>(get<0>(cmdPair)) == 0) {
+				// Get the forward/backward input
+				inputCmd = executeUserCommand();
 
-			// Purge extraneous characters from input stream
-			flushInput();
-
-			sendCommand(ch);
+			}
+			// We need to process both turn and forward/backward
+			else {
+				// Get the turn input
+				inputCmd = executeUserCommand();
+				// Get the forward/backward input
+				inputCmd = executeUserCommand();
+			}
+			
+			// Invert the input commands for future back tracking
+			//invertCommands(inputCmd);
+			
 		}
 	}
 
 	printf("Closing connection to Arduino.\n");
 	endSerial();
+	
+	return 0;
 }
 
 void handleError(TResult error)
@@ -139,6 +188,7 @@ void handleStatus(TPacket *packet)
 	printf("Forward Distance:\t\t%d\n", packet->params[8]);
 	printf("Reverse Distance:\t\t%d\n", packet->params[9]);
 	printf("\n---------------------------------------\n\n");
+
 }
 
 // TODO: Sync with James' respone code from Arduino
@@ -149,19 +199,21 @@ void handleResponse(TPacket *packet)
 	{
 		case RESP_OK:
 			printf("Command OK\n");
-		break;
+			break;
 
 		case RESP_STATUS:
 			handleStatus(packet);
-		break;
+			break;
 
-		case RESP_AUTO_OK:
+		case RESP_OK_AUTO:
 			printf("AUTONOMOUS Command OK");
 			AUTO_RECEIVE_OK = true;
+			break;
 			
-		case RESP_AUTO_BAD:
+		case RESP_BAD_AUTO:
 			printf("AUTONOMOUS Command BAD");
 			AUTO_RECEIVE_BAD = false;
+			break;
 
 		default:
 			printf("Arduino is confused\n");
@@ -260,53 +312,126 @@ void *receiveThread(void *p)
 	}
 }
 
+// This prints the current positional state of Vincent and the required
+// commands for next movement
+void printInstructions(float *currHead, float *nextHead, int *steps, rawDataCommandPair *pair) {
+	printf("******************************\n");
+	printf("Current Heading		: %f\n", *currHead);
+	printf("Next Heading		: %f\n", *nextHead);
+	printf("Grid steps required	: %d\n", *steps);
+	printf("******************************\n");
+	printf("Movement commands required:\n");
+	// Vincent needs to turn first
+	if ((pair->first).second != 0) {
+		if ((pair->first).first == "r") printf("TURN RIGHT by ");
+		else printf("TURN LEFT by ");
+		
+		printf("%0.2f degree\n", (pair->first).second);
+	}
+	
+	if ((pair->second).first == "f") printf("FORWARD by ");
+	else printf("BACKWARD by ");
+	printf("%0.2f CM\n", (pair->second).second);
+	printf("******************************\n\n");
+}
+
+// This simply executes the command 
+commandTuple executeUserCommand() {	
+	commandTuple cmdTup;			
+	char ch;
+	
+	printf("******************************\n");
+	printf("Commands:\n");
+	printf("f ---- forward\n");
+	printf("b ---- reverse\n");
+	printf("l ---- turn left\n"); 
+	printf("r ---- turn right\n");
+	printf("s ---- stop\n");
+	printf("c ---- clear stats\n");
+	printf("g ---- get stats\n");
+	printf("a ---- autonomous mode\n");
+	printf("q ---- exit\n");
+	printf("******************************\n");
+	printf("Input:	");
+	scanf("%c", &ch);
+	printf("\n");
+	
+	// Purge extraneous characters from input stream
+	flushInput();
+	
+	float value = sendCommand(ch);
+	
+	if (ch == 'f' || ch == 'F' ||ch == 'b' || ch == 'B') {
+		get<0>(cmdTup) = MOVE_COMMAND;
+		get<2>(cmdTup) = value;
+	}
+	else if (ch == 'l' || ch == 'L' ||ch == 'r' || ch == 'R') {
+		get<0>(cmdTup) = TURN_COMMAND;
+		get<2>(cmdTup) = value;
+	}
+	get<1>(cmdTup).push_back(ch);
+	
+	return cmdTup;
+}
+
+/* This takes in the raw data command pair and does TWO things:
+ * 
+ * 1. Invert the commands for backtracking in future
+ * 2. Push the inverted commands into the backtracking stack
+ */
+
 void flushInput()
 {
 	char c;
-
 	while((c = getchar()) != '\n' && c != EOF);
 }
 
-void getParams(TPacket *commandPacket)
+float getParams(TPacket *commandPacket)
 {
+	int value;
 	printf("Enter distance/angle in cm/degrees (e.g. 50) and power in %% (e.g. 75) separated by space.\n");
 	printf("E.g. 50 75 means go at 50 cm at 75%% power for forward/backward, or 50 degrees left or right turn at 75%%  power\n");
-	scanf("%d %d", &commandPacket->params[0], &commandPacket->params[1]);
+	scanf("%d %d", &value, &commandPacket->params[1]);
 	flushInput();
+	
+	commandPacket->params[0] = value;
+	
+	return (float)value;
 }
 
-void sendCommand(char command)
+float sendCommand(char command)
 {
 	TPacket commandPacket;
-
 	commandPacket.packetType = PACKET_TYPE_COMMAND;
+
+	float value;
 
 	switch(command)
 	{
 		case 'f':
 		case 'F':
-			getParams(&commandPacket);
+			value = getParams(&commandPacket);
 			commandPacket.command = COMMAND_FORWARD;
 			sendPacket(&commandPacket);
 			break;
 
 		case 'b':
 		case 'B':
-			getParams(&commandPacket);
+			value = getParams(&commandPacket);
 			commandPacket.command = COMMAND_REVERSE;
 			sendPacket(&commandPacket);
 			break;
 
 		case 'l':
 		case 'L':
-			getParams(&commandPacket);
+			value = getParams(&commandPacket);
 			commandPacket.command = COMMAND_TURN_LEFT;
 			sendPacket(&commandPacket);
 			break;
 
 		case 'r':
 		case 'R':
-			getParams(&commandPacket);
+			value = getParams(&commandPacket);
 			commandPacket.command = COMMAND_TURN_RIGHT;
 			sendPacket(&commandPacket);
 			break;
@@ -346,101 +471,72 @@ void sendCommand(char command)
 			printf("Bad command\n");
 
 	}
+	
+	return value;
 }
 
 /*
- * Retrieve navigation commands from RPiLidar and process them
- * before sending corresponding movement commands to Arduino
+ * Retrieve navigation raw data from RPiLidar and process them
+ * to become movement commands readable by Arduino
  * 
  * Current heading reports the current direction Vincent is facing,
  * where 0 <= currentHeading <= 359
  * 
- * Heading determines the direction of travel for Vincent, where
+ * Next heading determines the direction of travel for Vincent, where
  * 0 <= nextHeading <= 359
  * 
  * Grid steps is the number of steps, with reference to the GRID in the
  * navigation map, Vincent is required to move. This determines the 
+ *
+ * If both headings and grid steps are non-zero, Vincent has to spot
+ * turn to the next heading direction THEN moves forward by grid steps
+ * This means there are effectively two commands
+ * If only gridSteps is non-zero, Vincent only moves forward/backward 
+ * 
+ * Thus, we either return 1 or 2 movement commands. We wrap them in the
+ * defined rawDataCommandPair
  */
-void processCommands(int currentHeading, int nextHeading, 
+rawDataCommandPair processRawData(float currentHeading, float nextHeading, 
 	int gridSteps) {
-	// Command packet to be sent to Arduino
-	TPacket commandPacket;
-	commandPacket.packetType = PACKET_TYPE_COMMAND;
+	// Raw data to command pair
+	rawDataCommandPair cmdPair;
 		
-	// First, Vincent needs to determine the direction of based on the
-	// given heading
-	float complementAngle = abs((float) nextHeading - currentHeading);
-	float turnAngle = 0;
-	// Next, Vincent determines the movement distance if required
+	// First, Vincent determines the movement distance
 	float moveDistance = 0;
 	if (gridSteps > 0) {
-		 moveDistance = gridSteps * GRID_UNIT_DISTANCE; 
+		 moveDistance = (float)gridSteps * GRID_UNIT_DISTANCE; 
 	}
 	
-	// If the complement is more than 180, we know that
-	// Vincent needs to turn right. Else, Vincent will turn left.
-	// For convenient cases such as resultant angle = 0, 90, 180, 270,
-	// Vincent will move forward/backward/left(90deg)/right(90deg)
-	// If Vincent is moving forward/backward, we specify the distance
-	// based on the gridSteps.
-	// TODO: Algorithm WRONG, correct it
+	// Next, Vincent needs to determine the direction of based on the
+	// given heading
+	float turnAngle = nextHeading-currentHeading;
+	string direction;
 	
+	// We can use -180 < x <= 180 (degrees) 
+	// with negative going left, positive going right 
+	// Xavier:	Implemented Matthew's method and corrected sign error
+	//			Change 180 degre turn angle into the case where Vincent
+	//			will ground turn instead of reverse.
+	if (turnAngle > 180)
+		turnAngle -= 360;
+	else if (turnAngle < -180)
+		turnAngle += 360;
 	
-	/*
-		// We can use -180 < x <= 180 (degrees) 
-		// with negative going left, positive going right 
-		
-		float turnAngle = nextHeading-currentHeading;
-		
-		if (turnAngle > 180)
-			turnAngle -= 360;
-		else if (turnAngle < -180)
-			turnAngle += 360;
-		
-		if (turnAngle > 0) {
-			commandPacket.command = COMMAND_TURN_RIGHT;
-			commandPacket.params[0] = turnAngle;		
-		} else if (turnAngle < 0) {
-			commandPacket.command = COMMAND_TURN_LEFT;
-			commandPacket.params[0] = turnAngle;
-		} else if (turnAngle == -180 || turnAngle == 180){
-			commandPacket.command = COMMAND_REVERSE;
-			commandPacket.params[0] = moveDistance;
-		} else {
-			commandPacket.command = COMMAND_FORWARD;
-			commandPacket.params[0] = moveDistance;	
-		}
-		
-		commandPacket.params[1] = DEFAULT_SPEED;
-	*/
-	
-	if (complementAngle > 180) {
-		// Vincent needs to turn right
-		turnAngle = 360 - complementAngle;
-		commandPacket.command = COMMAND_TURN_RIGHT;
-		commandPacket.params[0] = turnAngle;
-		commandPacket.params[1] = DEFAULT_SPEED;
-	}
-	else if (complementAngle > 180) {
-		// Vincent needs to turn left
-		turnAngle = complementAngle;
-		commandPacket.command = COMMAND_TURN_LEFT;
-		commandPacket.params[0] = turnAngle;
-		commandPacket.params[1] = DEFAULT_SPEED;
-	}
-	else if (complementAngle == 180) {
-		// Vincent needs to reverse
-		commandPacket.command = COMMAND_REVERSE;
-		commandPacket.params[0] = moveDistance;
-		commandPacket.params[1] = DEFAULT_SPEED;
-	}
+	if (turnAngle > 0) {
+		direction = "r";
+	} 
+	else if (turnAngle < 0) {
+		direction = "l";
+		turnAngle = -turnAngle;
+	} 
+	else if (turnAngle == -180 || turnAngle == 180) {
+		direction = "f";
+	} 
 	else {
-		// Vincent continues forward
-		commandPacket.command = COMMAND_FORWARD;
-		commandPacket.params[0] = moveDistance;
-		commandPacket.params[1] = DEFAULT_SPEED;
+		direction = "f";
 	}
 	
-	// Send the command out to Arduino
-	sendPacket(&commandPacket);
+	cmdPair = make_pair(make_pair(direction, turnAngle), make_pair(direction, moveDistance));
+	
+	return cmdPair;
 }

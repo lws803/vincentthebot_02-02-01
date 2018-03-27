@@ -96,7 +96,7 @@ float currentSpeed;
 double heading;
 
 // Variables to track autonomous states
-volatile AUTONOMOUS_FLAG;
+volatile bool AUTONOMOUS_FLAG = false	;
 
 // Store current Vincent mode (default as remote)
 bool isAuto = false;
@@ -193,9 +193,11 @@ void setup() {
  *
  */
 void loop() {
+  /* BROKEN
   int MAG_x, MAG_y, MAG_z;
   MAG(&MAG_x, &MAG_y, &MAG_z);
   heading = atan2((double)MAG_y,(double)MAG_x);
+  */
   
   // Check when Vincent can stop moving forward/backward after
   // it is given a fixed distance to move forward/backward
@@ -244,14 +246,16 @@ void loop() {
       stop();
     }
   }
-
-  
   
   // Retrieve packets from RasPi and handle them
   TPacket recvPacket; // This holds commands from the Pi
   TResult result = readPacket(&recvPacket);
 
   // Handle packets differently if autonomous or remote
+  // 
+  // TODO: Do we really need to handle packets this way during 
+  // autonomous mode? Is it needed?
+  /*
   if (isAuto) {
     if (result == PACKET_AUTO_OK) {
       handlePacket(&recvPacket);
@@ -276,6 +280,18 @@ void loop() {
         if(result == PACKET_CHECKSUM_BAD)
           sendBadChecksum();
   }
+  */
+  
+  if(result == PACKET_OK)
+      handlePacket(&recvPacket);
+  else
+      if(result == PACKET_BAD)
+      {
+        sendBadPacket();
+      }
+      else
+        if(result == PACKET_CHECKSUM_BAD)
+          sendBadChecksum();
   
         
 }
