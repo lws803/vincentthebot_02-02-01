@@ -2,6 +2,7 @@
 #include <iostream>
 #include <utility>
 #include <tuple>
+#include <deque>
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
@@ -22,19 +23,8 @@ using namespace std;
 // Defined constants for movement command type
 #define MOVE_COMMAND 0 // For forward/backward
 #define TURN_COMMAND 1 // For turning
-
-/*
- * Global Variables
- */
-int exitFlag=0;
-sem_t _xmitSema;
-// Keep track of autonomous mode routine
-volatile bool AUTONOMOUS_FLAG = false;
-volatile bool AUTO_RECEIVE_OK = false;
-volatile bool AUTO_RECEIVE_BAD = false;
-float currentHeading = 0;
-float nextHeading = 0;
-int gridSteps = 0;
+// Local program commands
+#define PRINT_STACK_COMMAND 100
 
 /*
  * Structures definitions
@@ -48,6 +38,21 @@ typedef pair< pair<string, float> , pair<string, float> > rawDataCommandPair;
 // arg 2: Direction
 // arg 3: Angle/Distance
 typedef tuple<int, string, float> commandTuple;
+
+/*
+ * Global Variables
+ */
+int exitFlag=0;
+sem_t _xmitSema;
+// Keep track of autonomous mode routine
+volatile bool AUTONOMOUS_FLAG = false;
+volatile bool AUTO_RECEIVE_OK = false;
+volatile bool AUTO_RECEIVE_BAD = false;
+float currentHeading = 0;
+float nextHeading = 0;
+int gridSteps = 0;
+// Backtracking variables
+deque<commandTuple> backStack;
 
 /*
  * Function prototypes
@@ -67,6 +72,8 @@ commandTuple executeUserCommand();
 void flushInput();
 float getParams(TPacket *commandPacket);
 float sendCommand(char command);
+void pushCmdToStack(commandTuple *tup);
+void printCmdStack();
 // Process raw data from LIDAR
 rawDataCommandPair processRawData(float currentHeading, 
 	float nextHeading, int gridSteps);
@@ -144,7 +151,7 @@ int main()
 				// Get the forward/backward input
 				inputCmd = executeUserCommand();
 			}
-			
+			pushCmdToStack(&inputCmd);
 			// Invert the input commands for future back tracking
 			//invertCommands(inputCmd);
 			
@@ -349,6 +356,7 @@ commandTuple executeUserCommand() {
 	printf("c ---- clear stats\n");
 	printf("g ---- get stats\n");
 	printf("a ---- autonomous mode\n");
+	printf("p ---- print the command stack\n");
 	printf("q ---- exit\n");
 	printf("******************************\n");
 	printf("Input:	");
@@ -461,6 +469,11 @@ float sendCommand(char command)
 			printf("Switching to AUTONOMOUS mode...");
 			break;
 
+		case 'p':
+		case 'P':
+			printCmdStack();
+			break;
+
 		case 'q':
 		case 'Q':
 			exitFlag=1;
@@ -472,6 +485,33 @@ float sendCommand(char command)
 	}
 	
 	return value;
+}
+
+// Call this to push a command tuple into the back tracking command
+// stack
+void pushCmdToStack(commandTuple *tup) {
+	backStack.push_back(*tup);
+}
+
+// Prints the back tracking command stack
+void printCmdStack() {
+	printf("==================================================\n");
+	for (auto item : backStack) {
+		if (get<1>(item) == "f") {
+			printf("FORWARD      ||      %0.2f CM\n", get<2>(item));
+		}
+		else if (get<1>(item) == "b") {
+			printf("BACKWARD     ||      %0.2f CM\n", get<2>(item));
+		}
+		else if (get<1>(item) == "l") {
+			printf("LEFT         ||      %0.2f DEGREE\n", get<2>(item));
+		}
+		else {
+			printf("RIGHT        ||      %0.2f DEGREE\n", get<2>(item));
+		}
+	}
+	
+	printf("==================================================\n");
 }
 
 /*
