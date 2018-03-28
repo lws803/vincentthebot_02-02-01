@@ -558,7 +558,7 @@ void enablePullups()
   // 2 and 3. These are pins PD2 and PD3 respectively.
   // We set bits 2 and 3 in DDRD to 0 to make them inputs. 
   DDRD &= 0b11110011;
-  PIND |= 0b00001100;
+  //PIND |= 0b00001100;
 }
 
 // Functions to be called by INT0 and INT1 ISRs.

@@ -191,7 +191,6 @@ void handleStatus(TPacket *packet)
 
 }
 
-// TODO: Sync with James' respone code from Arduino
 void handleResponse(TPacket *packet)
 {
 	// The response code is stored in command
