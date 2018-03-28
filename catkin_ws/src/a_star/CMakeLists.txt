@@ -134,6 +134,7 @@ include_directories(
 add_executable(nav_stack src/nav_stack.cpp)
 target_link_libraries(nav_stack ${catkin_LIBRARIES})
 add_dependencies(nav_stack ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_compile_options(-std=c++17)
 
 
 
