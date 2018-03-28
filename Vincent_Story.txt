@@ -1,2 +1,5 @@
-Vincent’s background story:
-Vincent was the child of Bob and Angel the bots. They were all one family living under the E4 roof. As they were travelling out from their compartments, a heavy rain storm separated Bob and Angel from Vincent. Desperate and confused, he panicked and scoured all over engineering to look for his parents. Then, he found his parents stuck under the rubble near computing. He was then determined to save and rescue his parents, he prepared his LIDAR equipment with his navigation skills and go save the day.
+Vincentâ€™s background story:
+Vincent was the child of Bob and Angel the bots. They were all one family living under the E4 roof. As they were travelling out from their 
+compartments, a heavy rain storm separated Bob and Angel from Vincent. Desperate and confused, he panicked and scoured all over 
+engineering to look for his parents. Then, he found his parents stuck under the rubble near computing. He was then determined to save and 
+rescue his parents, he prepared his LIDAR equipment with his navigation skills and go save the day.
