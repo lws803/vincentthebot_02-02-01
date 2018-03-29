@@ -144,6 +144,7 @@ void writeSerial(const char *buffer, int len);
 
 // Start the motors
 void setupMotors();
+void startMotors();
 
 /*
 void right_motor_forward(void);
@@ -445,7 +446,6 @@ void sendMoveOK() {
 	movePacket.packetType = PACKET_TYPE_RESPONSE;
 	movePacket.command = RESP_STOP;
 	sendResponse(&movePacket);
-}
 }
 
 void sendResponse(TPacket *packet)
