@@ -43,7 +43,7 @@ volatile TDirection dir = STOP;
 #define NEED_ADJUST_RIGHT 1
 
 // PI, for calculating turn circumference 
-#define PI 3.1415926
+#define PI 3.1415923
 
 // Vincent's length and breadth in cm
 #define VINCENT_LENGTH 17.5
@@ -100,7 +100,7 @@ float currentSpeed;
 double heading;
 
 // Variables to track autonomous states
-volatile bool AUTONOMOUS_FLAG = false	;
+volatile bool AUTONOMOUS_FLAG = false  ;
 
 // Store current Vincent mode (default as remote)
 bool isAuto = false;
@@ -545,8 +545,8 @@ void handlePacket(TPacket *packet)
       break;
      
     case PACKET_TYPE_AUTO:
-		AUTONOMOUS_FLAG = true;
-		break;
+    AUTONOMOUS_FLAG = true;
+    break;
   }
 }
 
@@ -681,88 +681,45 @@ void writeSerial(const char *buffer, int len)
 // to drive the motors.
 void setupMotors()
 {
-  
   /* Our motor set up is:  
    *    A1IN - Pin 5, PD5, OC0B
    *    A2IN - Pin 6, PD6, OC0A
    *    B1IN - Pin 10, PB2, OC1B
-   *    B2In - Pin 11, PB3, OC2A
+   *    B2In - pIN 11, PB3, OC2A
    */
 
-   /*  
-    *  B1IN - Pin 3, PD3, OC2B
-   *   B2In - Pin 11, PB3, OC2A
-    *  
-    * TCNT0 = 0;
-    * OCR0A = 0;
-    * OCR0B = 0;
-    * TIMSK0 |= 0b110; //enable match interrupt
-    * 
-    * TCNT2 = 0;
-    * OCR2A = 0;
-    * OCR2B = 0;
-    * TIMSK2 |= 0b110; //enable match interrupt
-    * 
-    */
+   TCNT = 0;
+   
 }
 
 // Start the PWM for Vincent's motors.
 // We will implement this later. For now it is
 // blank.
-void startMotors()
-{
-  /*
+void startMotors(){
   TCCR0B = 0b0000011;
   TCCR2B = 0b0000100;
-  sei();
-  */
 }
 
-/*
-
-// TODO: double check pins
 void right_motor_forward(void) {
   TCCR0A = 0b10000001;
   PORTD &= 0b11011111;
 }
 
-
-// TODO: double check pins
 void right_motor_reverse(void) {
   TCCR0A = 0b00100001;
   PORTD &= 0b10111111;
 }
 
-
-// TODO: double check pins
 void left_motor_forward(void) {
   TCCR2A = 0b10000001;
   PORTD &= 0b11011111;
 }
 
-
-// TODO: double check pins
 void left_motor_reverse(void) {
   TCCR2A = 0b00100001;
   PORTD &= 0b11011111;
 }
 
-ISR(TIMER0_COMPA_vect) {
-  OCR0A = currentSpeed;
-}
-
-ISR(TIMER0_COMPB_vect) {
-  OCR0B = currentSpeed;
-}
-
-ISR(TIMER2_COMPA_vect) {
-  OCR2A = currentSpeed;
-}
-
-ISR(TIMER2_COMPB_vect) {
-  OCR2B = currentSpeed;
-}
-*/
 
 // Convert percentages to PWM values
 int pwmVal(float speed) 
@@ -1024,9 +981,3 @@ void lightRed()
   PORTD &= 0b11101111;
   delay(500);
 }
-
-int leftDistanceIR() 
-{
-  if ()
-}
-
