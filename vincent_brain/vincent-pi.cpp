@@ -129,18 +129,18 @@ int main()
 		 */
 		if (AUTONOMOUS_FLAG) {
 			// Wait for 2 seconds for RPi to get OK from Arduino
-			sleep(2):
+			sleep(2);
 			// Continuously process autonomous commands
 			// Inform Arduino incoming autonomous packet
 			sendPacket(&autoPacket);
 			if (AUTO_RECEIVE_OK) {
 				// Process the next command
-				backStack.pop();
-				processCommand(backStack.top());
+				backStack.pop_back();
+				processCommand(backStack.back());
 			}
 			else {
 				// Re-process the current failed command
-				processCommand(backStack.top());
+				processCommand(backStack.back());
 			}
 		}
 		else {
@@ -152,7 +152,9 @@ int main()
 			commandTuple inputCmd;
 			
 			while (RESPONSE_FLAG == false){};
-			sponseuteUserCommand();
+			if (get<1>(get<0>(cmdPair)) == 0) {
+				// Get the forward/backward input
+				inputCmd = executeUserCommand();
 				if (get<0>(inputCmd) != NON_MOVEMENT_COMMAND) {
 					// Invert the input commands for future back tracking
 					invertCommand(&inputCmd);
@@ -601,24 +603,24 @@ void processCommand(commandTuple cmdTup) {
 	TPacket commandPacket;
 	commandPacket.packetType = PACKET_TYPE_COMMAND;
 	
-	switch(get<1>(cmdTup)) {
-		case "f":
-		case "F":
+	switch(get<1>(cmdTup)[0]) {
+		case 'f':
+		case 'F':
 			commandPacket.command = COMMAND_FORWARD;
 			commandPacket.params[1] = DEFAULT_SPEED;
 			break;
-		case "b":
-		case "B":
-			commandPacket.command = COMMAND_BACKWARD;
+		case 'b':
+		case 'B':
+			commandPacket.command = COMMAND_REVERSE;
 			commandPacket.params[1] = DEFAULT_SPEED;
 			break;
-		case "l":
-		case "L":
+		case 'l':
+		case 'L':
 			commandPacket.command = COMMAND_TURN_LEFT;
 			commandPacket.params[1] = DEFAULT_LEFT_TURN_SPEED;
 			break;
-		case "r":
-		case "R":
+		case 'r':
+		case 'R':
 			commandPacket.command = COMMAND_TURN_RIGHT;
 			commandPacket.params[1] = DEFAULT_RIGHT_TURN_SPEED;
 			break;
