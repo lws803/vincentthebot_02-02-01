@@ -28,8 +28,8 @@ volatile TDirection dir = STOP;
 #define WHEEL_CIRC 20.4
 
 // LEFT and RIGHT wheel PWM DIFFERENCE
-#define WHEEL_DIFF_FOR -25
-#define WHEEL_DIFF_BAC -35
+#define WHEEL_DIFF_FOR 0
+#define WHEEL_DIFF_BAC 0
 
 // Motor control pins. You need to adjust these till
 // Vincent moves in the correct direction
