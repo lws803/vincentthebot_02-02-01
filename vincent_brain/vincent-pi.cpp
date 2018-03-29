@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <iostream>
+#include <fstream>
 #include <utility>
 #include <tuple>
+#include <deque>
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
@@ -22,19 +24,9 @@ using namespace std;
 // Defined constants for movement command type
 #define MOVE_COMMAND 0 // For forward/backward
 #define TURN_COMMAND 1 // For turning
-
-/*
- * Global Variables
- */
-int exitFlag=0;
-sem_t _xmitSema;
-// Keep track of autonomous mode routine
-volatile bool AUTONOMOUS_FLAG = false;
-volatile bool AUTO_RECEIVE_OK = false;
-volatile bool AUTO_RECEIVE_BAD = false;
-float currentHeading = 0;
-float nextHeading = 0;
-int gridSteps = 0;
+#define NON_MOVEMENT_COMMAND 2 // For all command non movement
+// Local program commands
+#define PRINT_STACK_COMMAND 100
 
 /*
  * Structures definitions
@@ -48,6 +40,25 @@ typedef pair< pair<string, float> , pair<string, float> > rawDataCommandPair;
 // arg 2: Direction
 // arg 3: Angle/Distance
 typedef tuple<int, string, float> commandTuple;
+
+/*
+ * Global Variables
+ */
+int exitFlag=0;
+sem_t _xmitSema;
+// Command response flag
+volatile bool RESPONSE_FLAG = true;
+// Keep track of autonomous mode routine
+volatile bool AUTONOMOUS_FLAG = false;
+volatile bool AUTO_RECEIVE_OK = false;
+volatile bool AUTO_RECEIVE_BAD = false;
+float currentHeading = 0;
+float nextHeading = 0;
+int gridSteps = 0;
+// Backtracking variables
+deque<commandTuple> backStack;
+// Output file for realtime reading
+//ofstream outputFile;
 
 /*
  * Function prototypes
@@ -67,6 +78,9 @@ commandTuple executeUserCommand();
 void flushInput();
 float getParams(TPacket *commandPacket);
 float sendCommand(char command);
+void invertCommand(commandTuple *tup);
+void pushCmdToStack(commandTuple *tup);
+void printCmdStack();
 // Process raw data from LIDAR
 rawDataCommandPair processRawData(float currentHeading, 
 	float nextHeading, int gridSteps);
@@ -98,6 +112,9 @@ int main()
 	// Autonomous packet
 	TPacket autoPacket;
 	autoPacket.packetType = PACKET_TYPE_AUTO;
+	
+	// Create a new screen output file
+	//outputFile.open("output.txt");
 
 	while(!exitFlag)
 	{
@@ -123,6 +140,8 @@ int main()
 				processRawData(currentHeading, nextHeading, gridSteps);
 			commandTuple inputCmd;
 			
+			while (RESPONSE_FLAG == false){};
+			
 			// Print the raw data and required command to standard
 			// output
 			printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
@@ -135,22 +154,34 @@ int main()
 			if (get<1>(get<0>(cmdPair)) == 0) {
 				// Get the forward/backward input
 				inputCmd = executeUserCommand();
+				if (get<0>(inputCmd) != NON_MOVEMENT_COMMAND) {
+					// Invert the input commands for future back tracking
+					invertCommand(&inputCmd);
+					pushCmdToStack(&inputCmd);
+				}
 
 			}
 			// We need to process both turn and forward/backward
 			else {
 				// Get the turn input
 				inputCmd = executeUserCommand();
+				if (get<0>(inputCmd) != NON_MOVEMENT_COMMAND) {
+					// Invert the input commands for future back tracking
+					invertCommand(&inputCmd);
+					pushCmdToStack(&inputCmd);
+				}
 				// Get the forward/backward input
 				inputCmd = executeUserCommand();
+				if (get<0>(inputCmd) != NON_MOVEMENT_COMMAND) {
+					// Invert the input commands for future back tracking
+					invertCommand(&inputCmd);
+					pushCmdToStack(&inputCmd);
+				}
 			}
-			
-			// Invert the input commands for future back tracking
-			//invertCommands(inputCmd);
-			
 		}
 	}
 
+	//outputFile.close();
 	printf("Closing connection to Arduino.\n");
 	endSerial();
 	
@@ -191,7 +222,6 @@ void handleStatus(TPacket *packet)
 
 }
 
-// TODO: Sync with James' respone code from Arduino
 void handleResponse(TPacket *packet)
 {
 	// The response code is stored in command
@@ -271,6 +301,8 @@ void handlePacket(TPacket *packet)
 				handleMessage(packet);
 			break;
 	}
+	// TODO: Should we place this in this function of handleResponse()?
+	RESPONSE_FLAG = true;
 }
 
 void sendPacket(TPacket *packet)
@@ -350,11 +382,12 @@ commandTuple executeUserCommand() {
 	printf("c ---- clear stats\n");
 	printf("g ---- get stats\n");
 	printf("a ---- autonomous mode\n");
+	printf("p ---- print the command stack\n");
 	printf("q ---- exit\n");
 	printf("******************************\n");
 	printf("Input:	");
 	scanf("%c", &ch);
-	printf("\n");
+	printf("\n\n");
 	
 	// Purge extraneous characters from input stream
 	flushInput();
@@ -368,6 +401,10 @@ commandTuple executeUserCommand() {
 	else if (ch == 'l' || ch == 'L' ||ch == 'r' || ch == 'R') {
 		get<0>(cmdTup) = TURN_COMMAND;
 		get<2>(cmdTup) = value;
+	}
+	else {
+		get<0>(cmdTup) = NON_MOVEMENT_COMMAND;
+		get<2>(cmdTup) = 0;
 	}
 	get<1>(cmdTup).push_back(ch);
 	
@@ -413,6 +450,7 @@ float sendCommand(char command)
 			value = getParams(&commandPacket);
 			commandPacket.command = COMMAND_FORWARD;
 			sendPacket(&commandPacket);
+			RESPONSE_FLAG = false;
 			break;
 
 		case 'b':
@@ -420,6 +458,7 @@ float sendCommand(char command)
 			value = getParams(&commandPacket);
 			commandPacket.command = COMMAND_REVERSE;
 			sendPacket(&commandPacket);
+			RESPONSE_FLAG = false;
 			break;
 
 		case 'l':
@@ -427,6 +466,7 @@ float sendCommand(char command)
 			value = getParams(&commandPacket);
 			commandPacket.command = COMMAND_TURN_LEFT;
 			sendPacket(&commandPacket);
+			RESPONSE_FLAG = false;
 			break;
 
 		case 'r':
@@ -434,12 +474,14 @@ float sendCommand(char command)
 			value = getParams(&commandPacket);
 			commandPacket.command = COMMAND_TURN_RIGHT;
 			sendPacket(&commandPacket);
+			RESPONSE_FLAG = false;
 			break;
 
 		case 's':
 		case 'S':
 			commandPacket.command = COMMAND_STOP;
 			sendPacket(&commandPacket);
+			RESPONSE_FLAG = false;
 			break;
 
 		case 'c':
@@ -447,12 +489,14 @@ float sendCommand(char command)
 			commandPacket.command = COMMAND_CLEAR_STATS;
 			commandPacket.params[0] = 0;
 			sendPacket(&commandPacket);
+			RESPONSE_FLAG = false;
 			break;
 
 		case 'g':
 		case 'G':
 			commandPacket.command = COMMAND_GET_STATS;
 			sendPacket(&commandPacket);
+			RESPONSE_FLAG = false;
 			break;
 		
 		case 'a':
@@ -460,6 +504,12 @@ float sendCommand(char command)
 			AUTONOMOUS_FLAG = true;
 			//getLidarData(&currentHeading, &nextHeading, &gridSteps);
 			printf("Switching to AUTONOMOUS mode...");
+			RESPONSE_FLAG = false;
+			break;
+
+		case 'p':
+		case 'P':
+			printCmdStack();
 			break;
 
 		case 'q':
@@ -473,6 +523,70 @@ float sendCommand(char command)
 	}
 	
 	return value;
+}
+
+// Invert the input command for back tracking in future
+void invertCommand(commandTuple *tup) {
+	if (get<0>(*tup) == TURN_COMMAND) {
+		if (get<1>(*tup) == "l" || get<1>(*tup) == "L") 
+			get<1>(*tup) = "r";
+			//*tup = make_tuple(get<0>(*tup), "r", get<2>(*tup));
+		else 
+			//*tup = make_tuple(get<0>(*tup), "l", get<2>(*tup));
+			get<1>(*tup) = "l";
+	}
+}
+
+// Call this to push a command tuple into the back track command
+// stack
+void pushCmdToStack(commandTuple *tup) {
+	backStack.push_back(*tup);
+}
+
+// Prints the back tracking command stack
+void printCmdStack() {
+	
+	printf("==================================================\n");
+	for (auto it = backStack.rbegin(); it != backStack.rend(); it++) {
+		if (get<1>(*it) == "f") {
+			printf("FORWARD - - -|| - - - %0.2f CM\n", get<2>(*it));
+		}
+		else if (get<1>(*it) == "b") {
+			printf("BACKWARD - - || - - - %0.2f CM\n", get<2>(*it));
+		}
+		else if (get<1>(*it) == "l") {
+			printf("LEFT - - - - || - - - %0.2f DEGREE\n", get<2>(*it));
+		}
+		else {
+			printf("RIGHT - - - -|| - - - %0.2f DEGREE\n", get<2>(*it));
+		}
+	}
+	
+	printf("==================================================\n\n");
+	
+	
+	/* TODO: Experimental: append screen output to another file instead
+	 * for realtime reading. Less cluttering on main terminal.
+	outputFile << "==================================================\n";
+	for (auto it = backStack.rbegin(); it != backStack.rend(); it++) {
+		if (get<1>(*it) == "f") {
+			outputFile << "FORWARD - - - || - - - " << get<2>(*it) << " CM\n";
+		}
+		else if (get<1>(*it) == "b") {
+			outputFile << "BACKWARD - - -|| - - - " << get<2>(*it) << " CM\n";
+		}
+		else if (get<1>(*it) == "l") {
+			outputFile << "LEFT - - - - -|| - - - " << get<2>(*it) << " DEGREE\n";
+		}
+		else {
+			outputFile << "RIGHT - - - - || - - - " << get<2>(*it) << " DEGREE\n";
+		}
+	}
+	
+	outputFile << "==================================================\n\n";
+	outputFile.close();
+	outputFile.open("output.txt");
+	*/
 }
 
 /*

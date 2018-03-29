@@ -27,6 +27,10 @@ volatile TDirection dir = STOP;
 // by taking revs * WHEEL_CIRC
 #define WHEEL_CIRC 20.4
 
+// LEFT and RIGHT wheel PWM DIFFERENCE
+#define WHEEL_DIFF_FOR -25
+#define WHEEL_DIFF_BAC -35
+
 // Motor control pins. You need to adjust these till
 // Vincent moves in the correct direction
 #define LF 6   // Left forward pin
@@ -227,14 +231,14 @@ void loop() {
   // it is given a fixed angle to turn left/right
   if (deltaTicks > 0) {
     if (dir == LEFT) {
-      if (leftReverseTicksTurns >= targetTicks) {
+      if (rightForwardTicksTurns >= targetTicks) {
         deltaTicks = 0;
         targetTicks = 0;
         stop();
       }
     }
     else if (dir == RIGHT) {
-      if (rightReverseTicksTurns >= targetTicks) {
+      if (leftForwardTicksTurns >= targetTicks) {
         deltaTicks = 0;
         targetTicks = 0;
         stop();
@@ -573,9 +577,9 @@ void leftISR()
     reverseDist = (unsigned long) ((float) leftReverseTicks 
       / COUNTS_PER_REV * WHEEL_CIRC);
   }
-  else if (dir == LEFT) {
-    leftReverseTicksTurns++;
-    rightForwardTicksTurns++;
+  else if (dir == RIGHT) {
+    //rightReverseTicksTurns++;
+    leftForwardTicksTurns++;
   }
 
   //Serial.print("DIST: ");
@@ -586,9 +590,9 @@ void rightISR()
 {
   if (dir == FORWARD) rightForwardTicks++;
   else if (dir == BACKWARD) rightReverseTicks++;
-  else if (dir == RIGHT) {
-    rightReverseTicksTurns++;
-    leftForwardTicksTurns++;
+  else if (dir == LEFT) {
+    //rightReverseTicksTurns++;
+    rightForwardTicksTurns++;
   }  
 
   //Serial.print("RIGHT: ");
@@ -612,8 +616,8 @@ ISR (INT0_vect) {
   leftISR();
   
   // Check for adjustments
-  if (getAdjustReadings() == NEED_ADJUST_LEFT) adjustLeft(100);
-  else adjustRight(100);
+  //if (getAdjustReadings() == NEED_ADJUST_LEFT) adjustLeft(100);
+  //else adjustRight(100);
 }
 
 ISR (INT1_vect) {
@@ -785,7 +789,8 @@ void forward(float dist, float speed)
   // Set current speed
   currentSpeed = speed;
 
-  int val = pwmVal(speed);
+  int rightVal = pwmVal(speed);
+  int leftVal = rightVal - WHEEL_DIFF_FOR;
 
   // Compute the new total distance given the input
   if (dist > 0) deltaDist = dist;
@@ -796,8 +801,8 @@ void forward(float dist, float speed)
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
 
-  analogWrite(LF, val);
-  analogWrite(RF, val);
+  analogWrite(LF, leftVal);
+  analogWrite(RF, rightVal);
   analogWrite(LR,0);
   analogWrite(RR, 0);
 }
@@ -815,7 +820,8 @@ void reverse(float dist, float speed)
   // Set current speed
   currentSpeed = speed;
 
-  int val = pwmVal(speed);
+  int rightVal = pwmVal(speed);
+  int leftVal = rightVal - WHEEL_DIFF_BAC;
   
   // Compute the new total distance given the input
   if (dist > 0) deltaDist = dist;
@@ -825,8 +831,8 @@ void reverse(float dist, float speed)
   // LF = Left forward pin, LR = Left reverse pin
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
-  analogWrite(LR, val);
-  analogWrite(RR, val);
+  analogWrite(LR, leftVal);
+  analogWrite(RR, rightVal);
   analogWrite(LF, 0);
   analogWrite(RF, 0);
 }
@@ -850,17 +856,18 @@ void left(float ang, float speed)
   // Set the direction of travel
   dir = LEFT;
 
-  int val = pwmVal(speed);
+  int rightVal = pwmVal(speed);
+  int leftVal = rightVal - WHEEL_DIFF_FOR;
 
   // Compute the new total ticks needed to left turn
   if(ang == 0) deltaTicks=99999999; 
   else deltaTicks=computeDeltaTicks(ang); 
-  targetTicks = leftReverseTicksTurns + deltaTicks;
+  targetTicks = rightForwardTicksTurns + deltaTicks;
 
   // To turn left we reverse the left wheel and move
   // the right wheel forward.
-  analogWrite(LR, val);
-  analogWrite(RF, val);
+  analogWrite(LR, 0);
+  analogWrite(RF, rightVal);
   analogWrite(LF, 0);
   analogWrite(RR, 0);
 }
@@ -875,17 +882,18 @@ void right(float ang, float speed)
   // Set the direction of travel
   dir = RIGHT;
 
-  int val = pwmVal(speed);
+  int rightVal = pwmVal(speed);
+  int leftVal = rightVal - WHEEL_DIFF_FOR;
 
   // Compute the new total ticks needed to right turn
   if(ang == 0) deltaTicks=99999999; 
   else deltaTicks=computeDeltaTicks(ang); 
-  targetTicks = rightReverseTicksTurns + deltaTicks;
+  targetTicks = leftForwardTicksTurns + deltaTicks;
 
   // To turn right we reverse the right wheel and move
   // the left wheel forward.
-  analogWrite(RR, val);
-  analogWrite(LF, val);
+  analogWrite(RR, 0);
+  analogWrite(LF, leftVal);
   analogWrite(LR, 0);
   analogWrite(RF, 0);
 }
