@@ -28,7 +28,9 @@ typedef enum
   RESP_BAD_COMMAND = 4,
   RESP_BAD_RESPONSE = 5,
   RESP_OK_AUTO = 6,
-  RESP_BAD_AUTO = 7
+  RESP_BAD_AUTO = 7,
+  RESP_MOVE_START = 8,
+  RESP_MOVE_STOP = 9
   
 } TResponseType;
 

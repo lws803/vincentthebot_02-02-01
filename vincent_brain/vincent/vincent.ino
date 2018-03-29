@@ -43,7 +43,7 @@ volatile TDirection dir = STOP;
 #define NEED_ADJUST_RIGHT 1
 
 // PI, for calculating turn circumference 
-#define PI 3.14159265358979
+#define PI 3.1415923
 
 // Vincent's length and breadth in cm
 #define VINCENT_LENGTH 17.5
@@ -100,7 +100,7 @@ float currentSpeed;
 double heading;
 
 // Variables to track autonomous states
-volatile bool AUTONOMOUS_FLAG = false	;
+volatile bool AUTONOMOUS_FLAG = false  ;
 
 // Store current Vincent mode (default as remote)
 bool isAuto = false;
@@ -119,6 +119,10 @@ void sendBadChecksum();
 void sendBadCommand();
 void sendBadResponse();
 void sendOK();
+void sendMoveOK();
+void sendOKAuto();
+void sendStopOK();
+
 void sendResponse(TPacket *packet);
 void handleCommand(TPacket *command);
 void waitForHello();
@@ -140,6 +144,15 @@ void writeSerial(const char *buffer, int len);
 
 // Start the motors
 void setupMotors();
+void startMotors();
+
+/*
+void right_motor_forward(void);
+void right_motor_reverse(void);
+void left_motor_forward(void);
+void left_motor_reverse(void);
+*/
+
 int pwmVal(float speed);
 void forward(float dist, float speed);
 void reverse(float dist, float speed);
@@ -421,6 +434,20 @@ void sendOKAuto() {
   sendResponse(&autoOKPacket);
 }
 
+void sendStopOK() {
+	TPacket stopPacket;
+	stopPacket.packetType = PACKET_TYPE_RESPONSE;
+	stopPacket.command = RESP_STOP;
+	sendResponse(&stopPacket);
+}
+
+void sendMoveOK() {
+	TPacket movePacket;
+	movePacket.packetType = PACKET_TYPE_RESPONSE;
+	movePacket.command = RESP_STOP;
+	sendResponse(&movePacket);
+}
+
 void sendResponse(TPacket *packet)
 {
   // Takes a packet, serializes it then sends it out
@@ -545,8 +572,8 @@ void handlePacket(TPacket *packet)
       break;
      
     case PACKET_TYPE_AUTO:
-		AUTONOMOUS_FLAG = true;
-		break;
+    AUTONOMOUS_FLAG = true;
+    break;
   }
 }
 
@@ -687,15 +714,44 @@ void setupMotors()
    *    B1IN - Pin 10, PB2, OC1B
    *    B2In - pIN 11, PB3, OC2A
    */
+   
 }
 
 // Start the PWM for Vincent's motors.
 // We will implement this later. For now it is
 // blank.
-void startMotors()
-{
-
+void startMotors(){
+	
+	// verify the ports
+  TCCR0B = 0b0000011;
+  TCCR2B = 0b0000100;
 }
+
+
+// Specific ports need to be verified in this part
+
+/*
+void right_motor_forward(void) {
+  TCCR0A = 0b10000001;
+  PORTD &= 0b11011111;
+}
+
+void right_motor_reverse(void) {
+  TCCR0A = 0b00100001;
+  PORTD &= 0b10111111;
+}
+
+void left_motor_forward(void) {
+  TCCR2A = 0b10000001;
+  PORTD &= 0b11011111;
+}
+
+void left_motor_reverse(void) {
+  TCCR2A = 0b00100001;
+  PORTD &= 0b11011111;
+}
+*/
+
 
 // Convert percentages to PWM values
 int pwmVal(float speed) 
@@ -721,6 +777,9 @@ void forward(float dist, float speed)
   
   // Set current speed
   currentSpeed = speed;
+  
+  // it is now moving
+  sendMoveOK();
 
   int rightVal = pwmVal(speed);
   int leftVal = rightVal - WHEEL_DIFF_FOR;
@@ -752,6 +811,9 @@ void reverse(float dist, float speed)
   
   // Set current speed
   currentSpeed = speed;
+  
+   // it is now moving
+  sendMoveOK();
 
   int rightVal = pwmVal(speed);
   int leftVal = rightVal - WHEEL_DIFF_BAC;
@@ -791,6 +853,9 @@ void left(float ang, float speed)
 
   int rightVal = pwmVal(speed);
   int leftVal = rightVal - WHEEL_DIFF_FOR;
+  
+  // it is now moving
+  sendMoveOK();
 
   // Compute the new total ticks needed to left turn
   if(ang == 0) deltaTicks=99999999; 
@@ -817,6 +882,9 @@ void right(float ang, float speed)
 
   int rightVal = pwmVal(speed);
   int leftVal = rightVal - WHEEL_DIFF_FOR;
+  
+  // it is now moving
+  sendMoveOK();
 
   // Compute the new total ticks needed to right turn
   if(ang == 0) deltaTicks=99999999; 
@@ -884,6 +952,8 @@ int getAdjustReadings()
 void stop()
 {
   dir = STOP;
+  sendStopOK();
+  
 
   analogWrite(LF, 0);
   analogWrite(LR, 0);
