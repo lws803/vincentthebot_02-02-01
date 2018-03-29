@@ -14,34 +14,12 @@
 #include <queue>
 
 
-#define MAX 5000
+#define MAX 50 // TODO: Max cannot be too large, find out how to make this smaller, maybe reduce resolution 
 
 
 using namespace std;
 using namespace ros;
 
-/*
-class coords_t {
-public:
-    int x, y;
-    double g_cost;
-    double h_cost;
-    coords_t* parent;
-    
-    bool operator== (coords_t other) {
-        if (other.x == this->x && other.y == this->y) {
-            return true;
-        }
-        return false;
-    }
-    bool operator!= (coords_t other) {
-        if (other.x != this->x && other.y != this->y) {
-            return true;
-        }
-        return false;
-    }
-};
-*/
 
 class a_star
 {
@@ -57,8 +35,9 @@ private:
 
 	};
 
-	map<double, coords_t* > open; // Use this map to store coords_t and its f_cost, acts as a PQ
+	//map<double, coords_t* > open; // Use this map to store coords_t and its f_cost, acts as a PQ
 
+	list <coords_t*> open;
 	int height = 0, width = 0;
 	int curr_x = 0, curr_y = 0;
 
@@ -88,7 +67,6 @@ public:
 	    	}
 	    	//cout << endl;
 	    }
-	    cout << index << endl;
 
 	}
 	~a_star() {
@@ -147,7 +125,8 @@ public:
 	                    neighbour->parent = current;
 	                }
 	                if (visited.find(make_pair(neighbour->x, neighbour->y)) == visited.end() && maze[(y+d)][(x+i)] <= probability ) {
-	                    open[neighbour->h_cost + neighbour->g_cost] = neighbour;
+	                    //open[neighbour->h_cost + neighbour->g_cost] = neighbour;
+	                    open.push_back(neighbour);
 	                    visited.insert(make_pair(neighbour->x, neighbour->y));
 	                }
 	            }
@@ -156,15 +135,27 @@ public:
 	}
 
 	int pathfinder (coords_t * start, coords_t * end, int maze[][MAX]) {
-	    open[0] = start;
+	    //open[0] = start;
+
+	    open.push_back (start);
 	    // Can only travel 4 directions
 	    while (!open.empty()) {
-	        coords_t *current = open.begin()->second;
-	        open.erase(open.begin());
-	        // Sorting
-	        
+            coords_t *current = open.front();
+            // Sorting
+            list<coords_t*>::iterator iterator;
+            for (iterator = open.begin(); iterator != open.end(); ++iterator) {
+                if (current->h_cost + current->g_cost > (*iterator)->g_cost + (*iterator)->h_cost) {
+                    current = *iterator; // Set current to node with the lowest f_cost
+                }else if (current->h_cost + current->g_cost == (*iterator)->g_cost + (*iterator)->h_cost &&
+                          current->h_cost > (*iterator)->h_cost) {
+                    // If they have the same f_cost
+                    current = *iterator;
+                }
+            }
+
+            open.remove (current);
 	        closed.push_back(current);
-	        // pop(open, current);
+
 	        if (current->x == end->x && current->y == end->y) {
 	            return 1; // Path has been found
 	        }
@@ -209,7 +200,7 @@ public:
 
 	// TODO: Get map meta data here too from a global variable 
 	void generate_path () {    
-	    
+
 	    coords_t *start = new coords_t;
 	    coords_t *end = new coords_t;
 	    int steps = 1;
@@ -273,7 +264,7 @@ void map_callback(const nav_msgs::OccupancyGrid::Ptr &data)
 
     // TODO: Find out what caused the seg fault
     a_star graph(data, 30, 30);
-    graph.generate_path();
+    //graph.generate_path();
 
     //cout << data->data << endl;
     // After receiving, then publish or activate motor here or pub to /movement, twist
