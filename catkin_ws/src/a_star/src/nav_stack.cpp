@@ -5,6 +5,7 @@
 #include <std_msgs/Float64MultiArray.h>
 #include <nav_msgs/MapMetaData.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <nav_msgs/Path.h>
 #include "ros/ros.h"
 #include <math.h>
 #include <list>
@@ -19,6 +20,13 @@ using namespace ros;
 
 
 int curr_x = 1, curr_y = 1;
+int end_x = 1023, end_y = 1023;
+nav_msgs::OccupancyGrid::Ptr local_map;
+nav_msgs::Path path;
+Publisher path_pub;
+
+
+
 
 
 class a_star
@@ -46,7 +54,7 @@ private:
 	set<pair<int, int > > visited;
 
 	// Params to set
-	int probability = 4;
+	int probability = 0;
 	int mode = 1; // 0 means manhattan distance, 1 means cartesian distance
 	// Need to juggle between the two, sometimes its actually better to use this
 	// Manhattan distance cannot travel diagonally
@@ -54,9 +62,9 @@ private:
 
 
 public:
-	a_star(const nav_msgs::OccupancyGrid::Ptr &data, int height, int width) {
-		this->height = height;
-		this->width = width;
+	a_star(const nav_msgs::OccupancyGrid::Ptr &data) {
+		this->height = data->info.height;
+		this->width = data->info.width;
 		int index = 0;
 
 	    for (int i = 0; i < height; ++i)
@@ -65,6 +73,7 @@ public:
 	    	for (int d = 0; d < width; ++d)
 	    	{
 	    		temp.push_back((int)data->data[index++]);
+	    		if (i == curr_y + height/2 && d == curr_x + width/2) cout << "Curr_point val: " << (int)data->data[index-1] << endl;
 	    	}
 	    	maze.push_back(temp);
 	    }
@@ -102,7 +111,8 @@ public:
 	    
 	    for (int i = -1; i < 2; i++) {
 	        for (int d = -1; d < 2; d++) {
-	            if (x+i < width && x+i >= 0 && y+d < height && y+d >= 0 && !(i == 0 && d == 0)) {
+	            if (x+i < width && x+i >= 0 && y+d < height && y+d >= 0 && !(i == 0 && d == 0)
+	            	) {
 	                coords_t *neighbour;
 	                if (x + i == end->x && y + d == end->y) {
 	                    // Just point the end to its parent
@@ -124,7 +134,9 @@ public:
 	                    neighbour->h_cost = cartesian_count(x+i, y+d, end->x, end->y);
 	                    neighbour->parent = current;
 	                }
-	                if (visited.find(make_pair(neighbour->x, neighbour->y)) == visited.end() && maze[(y+d)][(x+i)] <= probability ) {
+	                if (visited.find(make_pair(neighbour->x, neighbour->y)) == visited.end() 
+	                	&& maze[(y+d)][(x+i)] <= probability 
+	                	) {
 	                    //open[neighbour->h_cost + neighbour->g_cost] = neighbour;
 	                    open.push_back(neighbour);
 	                    visited.insert(make_pair(neighbour->x, neighbour->y));
@@ -170,7 +182,7 @@ public:
 	    // Dummy values 
 
 	    start->x = curr_x + width/2; start->y = curr_y + height/2;
-	    end->x = 10; end->y = 10;
+	    end->x = end_x; end->y = end_y;
 	    
 	    start->g_cost = 0;
 	    start->h_cost = cartesian_count(start->x, start->y, end->x, end->y);
@@ -200,6 +212,10 @@ public:
 	    return -1;
 	}
 
+	void get_curr_point () {
+		cout << "Curr_point: " << maze[curr_y + height/2][curr_x + width/2] << endl;
+	}
+
 
 	// TODO: Get map meta data here too from a global variable 
 	void generate_path () {    
@@ -207,14 +223,12 @@ public:
 	    coords_t *start = new coords_t;
 	    coords_t *end = new coords_t;
 	    int steps = 1;
-	    
+
 	    start_end_scan(start, end);
 	    cout << "Passed start end scan" << endl;
-	    
 	  	
 	    pathfinder(start, end);
 	    cout << "Passed A*" << endl;
-
 
 	    // Traceback
 	    maze[(end->y)][(end->x)] = -3; // We use -4 to signify the end
@@ -225,13 +239,15 @@ public:
 
 	    cout << "start " << start->x << " " << start->y << endl;
 	  	cout << "end " << end->x << " " << end->y << endl;
-
-	   	//print_maze ();
-	   	// TODO: Find out what's wrong with the traversal of the maze 
-	    // Iterate thru the next few
+	    
 	    while (current_point != start) {
 	        // Continue tracing
-	        current_point = current_point->parent;
+	        if (current_point == NULL) {
+	        	cout << "No path found" << endl;
+	        	return;
+	        }else {
+	       		current_point = current_point->parent;
+	        }
 	        int temp_heading = find_heading(current_point);
 	        if (temp_heading == curr_heading) steps_start++;
 	        else {
@@ -239,11 +255,19 @@ public:
 	            steps_start = 2;
 	            curr_heading = temp_heading;
 	        }
-	        
+
+	        geometry_msgs::PoseStamped my_pose;
+	        my_pose.pose.position.x = current_point->x - width/2;
+	        my_pose.pose.position.y = current_point->y - height/2;
+	        my_pose.header.frame_id = "/map";
+	        my_pose.pose.orientation.w = 1.0;
+
+	        path.poses.push_back(my_pose);
+
+
 	        maze[current_point->y][current_point->x] = -3;
 	        steps++;
 	    }
-	    
 	    
 	    cout << "Shortest path:" << endl << endl;
 	    //print_maze (maze);
@@ -262,40 +286,41 @@ void pose_data_callback (const geometry_msgs::PoseStamped::Ptr& data) {
 	// TODO: might need to import geometry_msgs/Pose.h
 	curr_x = data->pose.position.x;
 	curr_y =data->pose.position.y;
-	//cout << data->pose.position.x << endl;
-}
 
+	a_star graph(local_map);
+	graph.generate_path();
+	graph.get_curr_point();
+
+	// TODO: Publish the path properly and fix the crash when curr position = end position 
+	path.header.frame_id = "/map";
+	if (ok()) {
+		cout << "Path size: " << path.poses.size() << endl;
+		path_pub.publish(path);
+
+	}
+	path.poses.clear();
+
+}
 
 
 
 void map_callback(const nav_msgs::OccupancyGrid::Ptr &data)
 {
     // Receive data here
-    //generate_path(data->data[0]);
-
-    // TODO: Find out what caused the seg fault
-    a_star graph(data, data->info.height, data->info.width);
-
-    graph.generate_path();
-
-    // After receiving, then publish or activate motor here or pub to /movement, twist
-    // Publisher pub = n.advertise<std_msgs::Float64MultiArray>("/movement", 2);
+	local_map = data;
 }
 
 int main(int argc, char **argv){
     init(argc, argv, "nav_stack");
 
     NodeHandle n;
+    path_pub = n.advertise<nav_msgs::Path>("new_path", 1);
 
-    
+
     Subscriber sub = n.subscribe("/map", 1, map_callback); // This will call A* itself and control the systems  
     Subscriber sub3 = n.subscribe("/slam_out_pose", 1, pose_data_callback); // This will update global map metadata
-
 
     spin();
 }
 
-
-// TODO: make map call back update the local buffer instead of passing it straight.
-
-// Make A* perform on each pose update and see how fast it can go 
+// TODO: Find out how to reduce the phasing thru walls 
