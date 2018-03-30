@@ -55,7 +55,9 @@ private:
 
 	// Params to set
 	int probability = 0;
-	int mode = 1; // 0 means manhattan distance, 1 means cartesian distance
+	int mode = 1; 
+
+	// 0 means manhattan distance, 1 means cartesian distance
 	// Need to juggle between the two, sometimes its actually better to use this
 	// Manhattan distance cannot travel diagonally
 
@@ -210,6 +212,23 @@ public:
 	        }
 	    }
 	    return -1;
+	}
+
+
+	int calc_offset (int x, int y) {
+		int count = 0;
+		for (int i = -1; i < 2; i++) {
+	        for (int d = -1; d < 2; d++) {
+	            if (!(i == 0 && d == 0) 
+	            	&& x + i < width && x + i >= 0
+	            	&& y + d < height && y + d >= 0
+	            	&& maze[y + d][x + i] >= 0) {
+	                // Found black spots 
+	                count++;
+	            }
+	        }
+	    }
+	    return count;
 	}
 
 	void get_curr_point () {
