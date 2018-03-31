@@ -20,11 +20,14 @@ using namespace std;
 
 // Defined constants to indicate directions, distance and speed
 #define DEFAULT_SPEED 100 // Default move/turn speed
+#define DEFAULT_LEFT_TURN_SPEED 100 // Default left turn speed
+#define DEFAULT_RIGHT_TURN_SPEED 100 // Default right turn speed
 #define GRID_UNIT_DISTANCE 20 // Assume grid unit distance to be wheel circumference
 // Defined constants for movement command type
 #define MOVE_COMMAND 0 // For forward/backward
 #define TURN_COMMAND 1 // For turning
-#define NON_MOVEMENT_COMMAND 2 // For all command non movement
+#define NON_MOVEMENT_COMMAND 2 // For non movement commands
+#define END_COMMAND 3 // Vincent has reached the end point
 // Local program commands
 #define PRINT_STACK_COMMAND 100
 
@@ -48,10 +51,11 @@ int exitFlag=0;
 sem_t _xmitSema;
 // Command response flag
 volatile bool RESPONSE_FLAG = true;
+// General movement flags
+volatile bool isMoving = false;
 // Keep track of autonomous mode routine
 volatile bool AUTONOMOUS_FLAG = false;
 volatile bool AUTO_RECEIVE_OK = false;
-volatile bool AUTO_RECEIVE_BAD = false;
 float currentHeading = 0;
 float nextHeading = 0;
 int gridSteps = 0;
@@ -81,6 +85,7 @@ float sendCommand(char command);
 void invertCommand(commandTuple *tup);
 void pushCmdToStack(commandTuple *tup);
 void printCmdStack();
+void processCommand(commandTuple cmdTup);
 // Process raw data from LIDAR
 rawDataCommandPair processRawData(float currentHeading, 
 	float nextHeading, int gridSteps);
@@ -100,12 +105,10 @@ int main()
 
 	// Spawn receiver thread
 	pthread_t recv;
-
 	pthread_create(&recv, NULL, receiveThread, NULL);
 
 	// Send a hello packet
 	TPacket helloPacket;
-
 	helloPacket.packetType = PACKET_TYPE_HELLO;
 	sendPacket(&helloPacket);
 	
@@ -118,18 +121,26 @@ int main()
 
 	while(!exitFlag)
 	{
+		// Do not take in commands until Vincent has stopped
+		if (isMoving) continue;
+		
+		/* 
+		 * General Movement goes here
+		 */
 		if (AUTONOMOUS_FLAG) {
+			// Wait for 2 seconds for RPi to get OK from Arduino
+			sleep(2);
 			// Continuously process autonomous commands
 			// Inform Arduino incoming autonomous packet
 			sendPacket(&autoPacket);
 			if (AUTO_RECEIVE_OK) {
 				// Process the next command
-				//processCommands(currentHeading, nextHeading, gridSteps);
-				//getLidarData(&currentHeading, &nextHeading, &gridSteps);
+				backStack.pop_back();
+				processCommand(backStack.back());
 			}
 			else {
 				// Re-process the current failed command
-				//processCommands(currentHeading, nextHeading, gridSteps);
+				processCommand(backStack.back());
 			}
 		}
 		else {
@@ -141,16 +152,6 @@ int main()
 			commandTuple inputCmd;
 			
 			while (RESPONSE_FLAG == false){};
-			
-			// Print the raw data and required command to standard
-			// output
-			printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
-			
-			// TODO: UI mismatch. Reponse is received after printing
-			// the prompt message. Hence, response message gets printed
-			// AFTER prompt message. FIX THIS.
-			
-			// We only need to process one command, forward/backward
 			if (get<1>(get<0>(cmdPair)) == 0) {
 				// Get the forward/backward input
 				inputCmd = executeUserCommand();
@@ -236,13 +237,23 @@ void handleResponse(TPacket *packet)
 			break;
 
 		case RESP_OK_AUTO:
-			printf("AUTONOMOUS Command OK");
+			printf("AUTONOMOUS Command OK\n");
 			AUTO_RECEIVE_OK = true;
 			break;
 			
 		case RESP_BAD_AUTO:
-			printf("AUTONOMOUS Command BAD");
-			AUTO_RECEIVE_BAD = false;
+			printf("AUTONOMOUS Command BAD\n");
+			AUTO_RECEIVE_OK = false;
+			break;
+			
+		case RESP_MOVE_START:
+			printf("Vincent started moving\n");
+			isMoving = true;
+			break;
+			
+		case RESP_MOVE_STOP:
+			printf("Vincent stopped moving\n");
+			isMoving = false;
 			break;
 
 		default:
@@ -301,7 +312,7 @@ void handlePacket(TPacket *packet)
 				handleMessage(packet);
 			break;
 	}
-	// TODO: Should we place this in this function of handleResponse()?
+	// TODO: Should we place this in this function or handleResponse()?
 	RESPONSE_FLAG = true;
 }
 
@@ -347,11 +358,11 @@ void *receiveThread(void *p)
 // This prints the current positional state of Vincent and the required
 // commands for next movement
 void printInstructions(float *currHead, float *nextHead, int *steps, rawDataCommandPair *pair) {
-	printf("******************************\n");
+	printf("****************************************\n");
 	printf("Current Heading		: %f\n", *currHead);
 	printf("Next Heading		: %f\n", *nextHead);
 	printf("Grid steps required	: %d\n", *steps);
-	printf("******************************\n");
+	printf("****************************************\n");
 	printf("Movement commands required:\n");
 	// Vincent needs to turn first
 	if ((pair->first).second != 0) {
@@ -364,7 +375,7 @@ void printInstructions(float *currHead, float *nextHead, int *steps, rawDataComm
 	if ((pair->second).first == "f") printf("FORWARD by ");
 	else printf("BACKWARD by ");
 	printf("%0.2f CM\n", (pair->second).second);
-	printf("******************************\n\n");
+	printf("****************************************\n\n");
 }
 
 // This simply executes the command 
@@ -385,8 +396,7 @@ commandTuple executeUserCommand() {
 	printf("p ---- print the command stack\n");
 	printf("q ---- exit\n");
 	printf("******************************\n");
-	printf("Input:	");
-	scanf("%c", &ch);
+	scanf("Input: %c", &ch);
 	printf("\n\n");
 	
 	// Purge extraneous characters from input stream
@@ -504,6 +514,7 @@ float sendCommand(char command)
 			AUTONOMOUS_FLAG = true;
 			//getLidarData(&currentHeading, &nextHeading, &gridSteps);
 			printf("Switching to AUTONOMOUS mode...");
+			sleep(2);
 			RESPONSE_FLAG = false;
 			break;
 
@@ -530,9 +541,7 @@ void invertCommand(commandTuple *tup) {
 	if (get<0>(*tup) == TURN_COMMAND) {
 		if (get<1>(*tup) == "l" || get<1>(*tup) == "L") 
 			get<1>(*tup) = "r";
-			//*tup = make_tuple(get<0>(*tup), "r", get<2>(*tup));
 		else 
-			//*tup = make_tuple(get<0>(*tup), "l", get<2>(*tup));
 			get<1>(*tup) = "l";
 	}
 }
@@ -587,6 +596,45 @@ void printCmdStack() {
 	outputFile.close();
 	outputFile.open("output.txt");
 	*/
+}
+
+// Process and execute command from a commandTuple object
+void processCommand(commandTuple cmdTup) {
+	TPacket commandPacket;
+	commandPacket.packetType = PACKET_TYPE_COMMAND;
+	
+	switch(get<1>(cmdTup)[0]) {
+		case 'f':
+		case 'F':
+			commandPacket.command = COMMAND_FORWARD;
+			commandPacket.params[1] = DEFAULT_SPEED;
+			break;
+		case 'b':
+		case 'B':
+			commandPacket.command = COMMAND_REVERSE;
+			commandPacket.params[1] = DEFAULT_SPEED;
+			break;
+		case 'l':
+		case 'L':
+			commandPacket.command = COMMAND_TURN_LEFT;
+			commandPacket.params[1] = DEFAULT_LEFT_TURN_SPEED;
+			break;
+		case 'r':
+		case 'R':
+			commandPacket.command = COMMAND_TURN_RIGHT;
+			commandPacket.params[1] = DEFAULT_RIGHT_TURN_SPEED;
+			break;
+		default:
+			printf("Invalid command from stack");
+	}
+	
+	// Set the distance/angle value in command
+	commandPacket.params[0] = get<2>(cmdTup);
+	
+	// Send the command to Arduino
+	sendPacket(&commandPacket);
+	
+	RESPONSE_FLAG = false;
 }
 
 /*
