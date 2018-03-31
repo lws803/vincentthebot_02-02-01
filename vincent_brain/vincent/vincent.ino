@@ -33,10 +33,10 @@ volatile TDirection dir = STOP;
 
 // Motor control pins. You need to adjust these till
 // Vincent moves in the correct direction
-#define LF 6   // Left forward pin
-#define LR 5   // Left reverse pin
-#define RF 11  // Right forward pin
-#define RR 10  // Right reverse pin
+#define LF 6   // Left forward pin -> PD6
+#define LR 5   // Left reverse pin -> PD5
+#define RF 11  // Right forward pin -> PB3
+#define RR 10  // Right reverse pin -> PB2
 
 // Determine if left/right adjustments are needed
 #define NEED_ADJUST_LEFT 0 
@@ -722,9 +722,9 @@ void setupMotors()
 // blank.
 void startMotors(){
 	
-	// verify the ports
-  TCCR0B = 0b0000011;
-  TCCR2B = 0b0000100;
+// verify the ports
+  TCCR0B = 0b0000011;	// 64 prescalar value
+  TCCR2B = 0b0000100;	// 64 prescalar value
 }
 
 
@@ -793,6 +793,12 @@ void forward(float dist, float speed)
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
 
+  
+  /* 
+	OCR0A = leftVal;
+  */
+  
+  
   analogWrite(LF, leftVal);
   analogWrite(RF, rightVal);
   analogWrite(LR,0);
