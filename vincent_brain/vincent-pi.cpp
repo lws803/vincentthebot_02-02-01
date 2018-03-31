@@ -253,12 +253,12 @@ void handleResponse(TPacket *packet)
 			
 		case RESP_MOVE:
 			printf("Vincent started moving\n");
-			isMoving = true;
+			//isMoving = true;
 			break;
 			
 		case RESP_STOP:
 			printf("Vincent stopped moving\n");
-			isMoving = false;
+			//isMoving = false;
 			break;
 
 		default:

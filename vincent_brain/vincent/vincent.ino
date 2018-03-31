@@ -444,7 +444,7 @@ void sendStopOK() {
 void sendMoveOK() {
 	TPacket movePacket;
 	movePacket.packetType = PACKET_TYPE_RESPONSE;
-	movePacket.command = RESP_STOP;
+	movePacket.command = RESP_MOVE;
 	sendResponse(&movePacket);
 }
 
