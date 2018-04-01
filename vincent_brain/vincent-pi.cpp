@@ -122,14 +122,20 @@ int main()
 	while(!exitFlag)
 	{
 		// Do not take in commands until Vincent has stopped
-		if (isMoving) continue;
+		
+		if (isMoving) {
+			printf("moving");
+			continue;
+		}
+		
 		
 		/* 
 		 * General Movement goes here
 		 */
 		if (AUTONOMOUS_FLAG) {
 			// Wait for 2 seconds for RPi to get OK from Arduino
-			sleep(2);
+			//printf("auto on!!!!!\n");
+			//sleep(2);
 			// Continuously process autonomous commands
 			// Inform Arduino incoming autonomous packet
 			sendPacket(&autoPacket);
@@ -151,7 +157,7 @@ int main()
 				processRawData(currentHeading, nextHeading, gridSteps);
 			commandTuple inputCmd;
 			
-			while (RESPONSE_FLAG == false){};
+			//while (RESPONSE_FLAG == false){};
 			if (get<1>(get<0>(cmdPair)) == 0) {
 				// Get the forward/backward input
 				inputCmd = executeUserCommand();
@@ -246,14 +252,14 @@ void handleResponse(TPacket *packet)
 			AUTO_RECEIVE_OK = false;
 			break;
 			
-		case RESP_MOVE_START:
+		case RESP_MOVE:
 			printf("Vincent started moving\n");
-			isMoving = true;
+			//isMoving = true;
 			break;
 			
-		case RESP_MOVE_STOP:
+		case RESP_STOP:
 			printf("Vincent stopped moving\n");
-			isMoving = false;
+			//isMoving = false;
 			break;
 
 		default:
@@ -396,7 +402,8 @@ commandTuple executeUserCommand() {
 	printf("p ---- print the command stack\n");
 	printf("q ---- exit\n");
 	printf("******************************\n");
-	scanf("Input: %c", &ch);
+	printf("Input: ");
+	scanf("%c", &ch);
 	printf("\n\n");
 	
 	// Purge extraneous characters from input stream
@@ -407,16 +414,17 @@ commandTuple executeUserCommand() {
 	if (ch == 'f' || ch == 'F' ||ch == 'b' || ch == 'B') {
 		get<0>(cmdTup) = MOVE_COMMAND;
 		get<2>(cmdTup) = value;
+		get<1>(cmdTup).push_back(ch);
 	}
 	else if (ch == 'l' || ch == 'L' ||ch == 'r' || ch == 'R') {
 		get<0>(cmdTup) = TURN_COMMAND;
 		get<2>(cmdTup) = value;
+		get<1>(cmdTup).push_back(ch);	
 	}
 	else {
 		get<0>(cmdTup) = NON_MOVEMENT_COMMAND;
 		get<2>(cmdTup) = 0;
 	}
-	get<1>(cmdTup).push_back(ch);
 	
 	return cmdTup;
 }
@@ -515,7 +523,7 @@ float sendCommand(char command)
 			//getLidarData(&currentHeading, &nextHeading, &gridSteps);
 			printf("Switching to AUTONOMOUS mode...");
 			sleep(2);
-			RESPONSE_FLAG = false;
+				RESPONSE_FLAG = false;
 			break;
 
 		case 'p':
