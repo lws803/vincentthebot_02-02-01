@@ -30,7 +30,8 @@ typedef enum
   RESP_OK_AUTO = 6,
   RESP_BAD_AUTO = 7,
   RESP_STOP = 8,
-  RESP_MOVE = 9
+  RESP_MOVE = 9,
+  RESP_READY = 10
   
 } TResponseType;
 

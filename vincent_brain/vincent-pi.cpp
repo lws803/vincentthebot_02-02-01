@@ -84,6 +84,7 @@ float getParams(TPacket *commandPacket);
 float sendCommand(char command);
 void invertCommand(commandTuple *tup);
 void pushCmdToStack(commandTuple *tup);
+void popFromStack();
 void printCmdStack();
 void processCommand(commandTuple cmdTup);
 // Process raw data from LIDAR
@@ -122,23 +123,33 @@ int main()
 	while(!exitFlag)
 	{
 		// Do not take in commands until Vincent has stopped
-		
+		/* BROKEN
 		if (isMoving) {
 			printf("moving");
 			continue;
 		}
+		*/
 		
+		bool rdyMsg = false;
+		while (RESPONSE_FLAG == false) {
+			if (!rdyMsg && isMoving) {
+				printf("Vincent not ready, standby..\n");
+				rdyMsg = true;
+			}
+		}
 		
 		/* 
 		 * General Movement goes here
 		 */
 		if (AUTONOMOUS_FLAG) {
-			// Wait for 2 seconds for RPi to get OK from Arduino
-			sleep(2);
+			// Wait for 2 seconds for RPi to get OK from Arduino		
+			//sleep(2); // BROKEN
 			// Continuously process autonomous commands
 			// Inform Arduino incoming autonomous packet
 			sendPacket(&autoPacket);
 			if (AUTO_RECEIVE_OK) {
+				// Finish when stack is empty
+				if (backStack.empty()) continue;
 				// Process the next command
 				backStack.pop_back();
 				processCommand(backStack.back());
@@ -156,7 +167,16 @@ int main()
 				processRawData(currentHeading, nextHeading, gridSteps);
 			commandTuple inputCmd;
 			
-			while (RESPONSE_FLAG == false){};
+			/*
+			bool rdyMsg = false;
+			while (RESPONSE_FLAG == false) {
+				if (!rdyMsg && isMoving) {
+					printf("Vincent not ready, standby..\n");
+					rdyMsg = true;
+				}
+			}
+			*/
+			
 			if (get<1>(get<0>(cmdPair)) == 0) {
 				// Get the forward/backward input
 				inputCmd = executeUserCommand();
@@ -253,14 +273,19 @@ void handleResponse(TPacket *packet)
 			
 		case RESP_MOVE:
 			printf("Vincent started moving\n");
-			//isMoving = true;
+			isMoving = true;
 			break;
 			
 		case RESP_STOP:
 			printf("Vincent stopped moving\n");
-			//isMoving = false;
+			isMoving = false;
 			break;
-
+		
+		case RESP_READY:
+			printf("Vincent ready for next command\n");
+			RESPONSE_FLAG = true;
+			break;
+			
 		default:
 			printf("Arduino is confused\n");
 	}
@@ -317,8 +342,6 @@ void handlePacket(TPacket *packet)
 				handleMessage(packet);
 			break;
 	}
-	// TODO: Should we place this in this function or handleResponse()?
-	RESPONSE_FLAG = true;
 }
 
 void sendPacket(TPacket *packet)
@@ -395,10 +418,12 @@ commandTuple executeUserCommand() {
 	printf("l ---- turn left\n"); 
 	printf("r ---- turn right\n");
 	printf("s ---- stop\n");
+	printf("e ---- indicate end point is reached\n");
 	printf("c ---- clear stats\n");
 	printf("g ---- get stats\n");
 	printf("a ---- autonomous mode\n");
 	printf("p ---- print the command stack\n");
+	printf("o ---- pop most recent command from stack\n");
 	printf("q ---- exit\n");
 	printf("******************************\n");
 	printf("Input: ");
@@ -447,6 +472,7 @@ float getParams(TPacket *commandPacket)
 	printf("E.g. 50 75 means go at 50 cm at 75%% power for forward/backward, or 50 degrees left or right turn at 75%%  power\n");
 	scanf("%d %d", &value, &commandPacket->params[1]);
 	flushInput();
+	printf("\n\n");
 	
 	commandPacket->params[0] = value;
 	
@@ -457,8 +483,14 @@ float sendCommand(char command)
 {
 	TPacket commandPacket;
 	commandPacket.packetType = PACKET_TYPE_COMMAND;
+	
+	TPacket endPacket;
+	endPacket.packetType = PACKET_TYPE_COMMAND;
 
 	float value;
+	
+	// Insert a dummy command into the stack
+	commandTuple cmdTup;
 
 	switch(command)
 	{
@@ -501,6 +533,24 @@ float sendCommand(char command)
 			RESPONSE_FLAG = false;
 			break;
 
+		case 'e':
+		case 'E':
+			commandPacket.command = COMMAND_STOP;
+			sendPacket(&commandPacket);
+			RESPONSE_FLAG = false;
+			while (!RESPONSE_FLAG)
+			endPacket.command = COMMAND_TURN_RIGHT;
+			endPacket.params[0] = 180;
+			endPacket.params[1] = DEFAULT_RIGHT_TURN_SPEED;
+			sendPacket(&endPacket);
+			// Insert a dummy command into the stack
+			get<0>(cmdTup) = MOVE_COMMAND;
+			get<1>(cmdTup).push_back('f');
+			get<2>(cmdTup) = value;
+			pushCmdToStack(&cmdTup);
+			RESPONSE_FLAG = false;
+			break;
+
 		case 'c':
 		case 'C':
 			commandPacket.command = COMMAND_CLEAR_STATS;
@@ -519,15 +569,22 @@ float sendCommand(char command)
 		case 'a':
 		case 'A':
 			AUTONOMOUS_FLAG = true;
+			RESPONSE_FLAG = false;
 			//getLidarData(&currentHeading, &nextHeading, &gridSteps);
-			printf("Switching to AUTONOMOUS mode...");
+			printf("Switching to AUTONOMOUS mode...\n");
+			commandPacket.command = COMMAND_AUTO_MODE;
+			sendPacket(&commandPacket);
 			sleep(2);
-				RESPONSE_FLAG = false;
 			break;
 
 		case 'p':
 		case 'P':
 			printCmdStack();
+			break;
+			
+		case 'o':
+		case 'O':
+			popFromStack();
 			break;
 
 		case 'q':
@@ -559,10 +616,22 @@ void pushCmdToStack(commandTuple *tup) {
 	backStack.push_back(*tup);
 }
 
+// Call this to pop the most top command in the back track command stack
+void popFromStack() {
+	printf("CURRENT STACK\n");
+	printCmdStack();
+	printf("Now we pop the most recent command..\n");
+	backStack.pop_back();
+	printCmdStack();
+}
+
 // Prints the back tracking command stack
 void printCmdStack() {
 	
 	printf("==================================================\n");
+	printf("\t\tMOVEMENT STACK\n");
+	printf("==================================================\n");
+	if (backStack.empty()) printf("\t\tSTACK IS EMPTY!\n");
 	for (auto it = backStack.rbegin(); it != backStack.rend(); it++) {
 		if (get<1>(*it) == "f") {
 			printf("FORWARD - - -|| - - - %0.2f CM\n", get<2>(*it));

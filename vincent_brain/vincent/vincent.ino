@@ -122,6 +122,7 @@ void sendOK();
 void sendMoveOK();
 void sendOKAuto();
 void sendStopOK();
+void sendReady();
 
 void sendResponse(TPacket *packet);
 void handleCommand(TPacket *command);
@@ -302,15 +303,13 @@ void loop() {
   if(result == PACKET_OK)
       handlePacket(&recvPacket);
   else
-      if(result == PACKET_BAD)
-      {
+      if(result == PACKET_BAD) {
         sendBadPacket();
       }
       else
         if(result == PACKET_CHECKSUM_BAD)
           sendBadChecksum();
   
-        
 }
 
 /*
@@ -448,6 +447,13 @@ void sendMoveOK() {
 	sendResponse(&movePacket);
 }
 
+void sendReady() {
+	TPacket readyPacket;
+	readyPacket.packetType = PACKET_TYPE_RESPONSE;
+	readyPacket.command = RESP_READY;
+	sendResponse(&readyPacket);
+}
+
 void sendResponse(TPacket *packet)
 {
   // Takes a packet, serializes it then sends it out
@@ -496,18 +502,22 @@ void handleCommand(TPacket *command)
       break;
     case COMMAND_GET_STATS:
       sendStatus();
+      sendReady();
       break;
     case COMMAND_CLEAR_STATS:
       sendOK();
       clearOneCounter(command->params[0]);
+      sendReady();
       break;
     case COMMAND_AUTO_MODE:
       isAuto = true;
       sendOKAuto();
+      sendReady();
       break;
     case COMMAND_REMOTE_MODE:
       isAuto = false;
       sendOK();
+      sendReady();
       break;
     default:
       sendBadCommand();
@@ -952,13 +962,14 @@ int getAdjustReadings()
 void stop()
 {
   dir = STOP;
-  sendStopOK();
-  
 
   analogWrite(LF, 0);
   analogWrite(LR, 0);
   analogWrite(RF, 0);
   analogWrite(RR, 0);
+  
+	sendStopOK();
+	sendReady();
 }
 
 /*
