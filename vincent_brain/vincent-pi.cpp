@@ -130,6 +130,8 @@ int main()
 		}
 		*/
 		
+		// Wait for Arduino to send the ready status to indicate ready
+		// to receive the next command
 		bool rdyMsg = false;
 		while (RESPONSE_FLAG == false) {
 			if (!rdyMsg && isMoving) {
@@ -137,13 +139,15 @@ int main()
 				rdyMsg = true;
 			}
 		}
-		
+
 		/* 
 		 * General Movement goes here
 		 */
 		if (AUTONOMOUS_FLAG) {
-			// Wait for 2 seconds for RPi to get OK from Arduino		
-			//sleep(2); // BROKEN
+			// Wait for 2 seconds for RPi to get OK from Arduino
+			// BROKEN
+			//printf("auto on!!!!!\n");
+			//sleep(2);
 			// Continuously process autonomous commands
 			// Inform Arduino incoming autonomous packet
 			sendPacket(&autoPacket);
@@ -166,16 +170,6 @@ int main()
 			rawDataCommandPair cmdPair = 
 				processRawData(currentHeading, nextHeading, gridSteps);
 			commandTuple inputCmd;
-			
-			/*
-			bool rdyMsg = false;
-			while (RESPONSE_FLAG == false) {
-				if (!rdyMsg && isMoving) {
-					printf("Vincent not ready, standby..\n");
-					rdyMsg = true;
-				}
-			}
-			*/
 			
 			if (get<1>(get<0>(cmdPair)) == 0) {
 				// Get the forward/backward input
@@ -273,12 +267,12 @@ void handleResponse(TPacket *packet)
 			
 		case RESP_MOVE:
 			printf("Vincent started moving\n");
-			isMoving = true;
+			//isMoving = true;
 			break;
 			
 		case RESP_STOP:
 			printf("Vincent stopped moving\n");
-			isMoving = false;
+			//isMoving = false;
 			break;
 		
 		case RESP_READY:
