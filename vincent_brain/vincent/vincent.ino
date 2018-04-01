@@ -4,6 +4,16 @@
 #include "packet.h"
 #include "constants.h"
 
+/*
+ * TODO:
+ * 1. Convert AnalogWrite to bare metal programming (if we have time)
+ * 2. Stack Nav, make sure it doesn't give bad checksum
+ * 3. Calibrate with new motors
+ * 4. Magnetometer XOR Ticks
+ * 
+ */
+
+
 typedef enum
 {
   STOP=0,
@@ -20,7 +30,7 @@ volatile TDirection dir = STOP;
 
 // Number of ticks per revolution from the 
 // wheel encoder.
-#define COUNTS_PER_REV 195
+#define COUNTS_PER_REV 95
 
 // Wheel circumference in cm.
 // We will use this to calculate forward/backward distance travelled 
@@ -28,7 +38,7 @@ volatile TDirection dir = STOP;
 #define WHEEL_CIRC 20.4
 
 // LEFT and RIGHT wheel PWM DIFFERENCE
-#define WHEEL_DIFF_FOR -25
+#define WHEEL_DIFF_FOR -35 
 #define WHEEL_DIFF_BAC -35
 
 // Motor control pins. You need to adjust these till
@@ -175,8 +185,6 @@ void MAG(int*, int*, int*);
 // Debugging
 void lightRed();
 
-
-
 /*
  *
  * Setup Arduino
@@ -244,14 +252,14 @@ void loop() {
   // it is given a fixed angle to turn left/right
   if (deltaTicks > 0) {
     if (dir == LEFT) {
-      if (rightForwardTicksTurns >= targetTicks) {
+      if (rightForwardTicksTurns >= targetTicks) 
         deltaTicks = 0;
         targetTicks = 0;
         stop();
       }
     }
     else if (dir == RIGHT) {
-      if (leftForwardTicksTurns >= targetTicks) {
+        if (leftForwardTicksTurns >= targetTicks) {
         deltaTicks = 0;
         targetTicks = 0;
         stop();
@@ -299,17 +307,20 @@ void loop() {
   }
   */
   
-  if(result == PACKET_OK)
+  if(result == PACKET_OK) {
       handlePacket(&recvPacket);
-  else
+  } else {
       if(result == PACKET_BAD)
       {
         sendBadPacket();
       }
-      else
-        if(result == PACKET_CHECKSUM_BAD)
+      else {
+        if(result == PACKET_CHECKSUM_BAD) {
           sendBadChecksum();
-  
+        }
+          
+      }
+  }
         
 }
 
@@ -594,21 +605,20 @@ void enablePullups()
 
 // Functions to be called by INT0 and INT1 ISRs.
 void leftISR()
-{
+{ 
   if (dir == FORWARD) {
     leftForwardTicks++;
     forwardDist = (unsigned long) ((float) leftForwardTicks / COUNTS_PER_REV * WHEEL_CIRC);
   }
   else if (dir == BACKWARD) {
     leftReverseTicks++;
-    reverseDist = (unsigned long) ((float) leftReverseTicks 
-      / COUNTS_PER_REV * WHEEL_CIRC);
+    reverseDist = (unsigned long) ((float) leftReverseTicks /COUNTS_PER_REV * WHEEL_CIRC);
   }
   else if (dir == RIGHT) {
     //rightReverseTicksTurns++;
     leftForwardTicksTurns++;
   }
-
+  
   //Serial.print("DIST: ");
   //Serial.println(forwardDist);
 }
@@ -624,6 +634,7 @@ void rightISR()
 
   //Serial.print("RIGHT: ");
   //Serial.println((double)rightTicks/COUNTS_PER_REV * WHEEL_CIRC);
+
 }
 
 // Set up the external interrupt pins INT0 and INT1
@@ -781,6 +792,11 @@ void forward(float dist, float speed)
   // it is now moving
   sendMoveOK();
 
+/*
+ * int leftVal = pwmVal(speed);
+ * int rightVal = leftVal + WHEEL_DIFF_FOR;
+ */
+  
   int rightVal = pwmVal(speed);
   int leftVal = rightVal - WHEEL_DIFF_FOR;
 
@@ -821,6 +837,11 @@ void reverse(float dist, float speed)
    // it is now moving
   sendMoveOK();
 
+  /*
+ * int leftVal = pwmVal(speed);
+ * int rightVal = leftVal + WHEEL_DIFF_BAC;
+ */
+ 
   int rightVal = pwmVal(speed);
   int leftVal = rightVal - WHEEL_DIFF_BAC;
   
@@ -857,8 +878,14 @@ void left(float ang, float speed)
   // Set the direction of travel
   dir = LEFT;
 
-  int rightVal = pwmVal(speed);
-  int leftVal = rightVal - WHEEL_DIFF_FOR;
+/*
+ * int rightVal = pwmVal(speed);
+   int leftVal = rightVal - WHEEL_DIFF_FOR;
+ * 
+ */
+    
+  int leftVal = pwmVal(speed);
+  int rightVal = leftVal + WHEEL_DIFF_FOR;  
   
   // it is now moving
   sendMoveOK();
@@ -885,9 +912,9 @@ void right(float ang, float speed)
 {
   // Set the direction of travel
   dir = RIGHT;
-
-  int rightVal = pwmVal(speed);
-  int leftVal = rightVal - WHEEL_DIFF_FOR;
+  
+  int leftVal = pwmVal(speed);
+  int rightVal = leftVal + WHEEL_DIFF_FOR;
   
   // it is now moving
   sendMoveOK();
