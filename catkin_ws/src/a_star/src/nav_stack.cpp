@@ -20,7 +20,7 @@ using namespace ros;
 
 
 int curr_x = 1, curr_y = 1;
-int end_x = 1023, end_y = 1023;
+int end_x = 2, end_y = 2;
 nav_msgs::OccupancyGrid::Ptr local_map;
 nav_msgs::Path path;
 Publisher path_pub;
@@ -75,7 +75,7 @@ public:
 	    	for (int d = 0; d < width; ++d)
 	    	{
 	    		temp.push_back((int)data->data[index++]);
-	    		if (i == curr_y + height/2 && d == curr_x + width/2) cout << "Curr_point val: " << (int)data->data[index-1] << endl;
+	    		if (i == curr_y && d == curr_x) cout << "Curr_point val: " << (int)data->data[index-1] << endl;
 	    	}
 	    	maze.push_back(temp);
 	    }
@@ -183,7 +183,7 @@ public:
 	void start_end_scan (coords_t *start, coords_t *end) {    
 	    // Dummy values 
 
-	    start->x = curr_x + width/2; start->y = curr_y + height/2;
+	    start->x = curr_x; start->y = curr_y;
 	    end->x = end_x; end->y = end_y;
 	    
 	    start->g_cost = 0;
@@ -232,7 +232,7 @@ public:
 	}
 
 	void get_curr_point () {
-		cout << "Curr_point: " << maze[curr_y + height/2][curr_x + width/2] << endl;
+		cout << "Curr_point: " << maze[curr_y][curr_x] << endl;
 	}
 
 
@@ -243,56 +243,65 @@ public:
 	    coords_t *end = new coords_t;
 	    int steps = 1;
 
+	    // Error handling 
+
 	    start_end_scan(start, end);
 	    cout << "Passed start end scan" << endl;
 	  	
 	    pathfinder(start, end);
 	    cout << "Passed A*" << endl;
 
-	    // Traceback
-	    maze[(end->y)][(end->x)] = -3; // We use -4 to signify the end
-	    coords_t* current_point = end;
-	    int curr_heading = find_heading(current_point);
-	    int steps_start = 2;
-	    
+	    if (visited.find(make_pair(end_x, end_y)) != visited.end()) {
+		   	// Traceback
+		    maze[(end->y)][(end->x)] = -3; // We use -4 to signify the end
+		   	coords_t* current_point = end;
+		    int curr_heading = find_heading(current_point);
+		    int steps_start = 2;
+		    
 
-	    cout << "start " << start->x << " " << start->y << endl;
-	  	cout << "end " << end->x << " " << end->y << endl;
-	    
-	    while (current_point != start) {
-	        // Continue tracing
-	        if (current_point == NULL) {
-	        	cout << "No path found" << endl;
-	        	return;
-	        }else {
-	       		current_point = current_point->parent;
-	        }
-	        int temp_heading = find_heading(current_point);
-	        if (temp_heading == curr_heading) steps_start++;
-	        else {
-	            // Reset steps
-	            steps_start = 2;
-	            curr_heading = temp_heading;
-	        }
+		    cout << "start " << start->x << " " << start->y << endl;
+		  	cout << "end " << end->x << " " << end->y << endl;
+		    
 
-	        geometry_msgs::PoseStamped my_pose;
-	        my_pose.pose.position.x = current_point->x - width/2;
-	        my_pose.pose.position.y = current_point->y - height/2;
-	        my_pose.header.frame_id = "/map";
-	        my_pose.pose.orientation.w = 1.0;
+		    while (current_point != start) {
+		        // Continue tracing
+		        if (current_point == NULL) {
+		        	cout << "No path found" << endl;
+		        	return;
+		        }else {
+		       		current_point = current_point->parent;
+		        }
+		        int temp_heading = find_heading(current_point);
+		        if (temp_heading == curr_heading) steps_start++;
+		        else {
+		            // Reset steps
+		            steps_start = 2;
+		            curr_heading = temp_heading;
+		        }
 
-	        path.poses.push_back(my_pose);
+		        geometry_msgs::PoseStamped my_pose;
+		        my_pose.pose.position.x = current_point->x;
+		        my_pose.pose.position.y = current_point->y;
+		        my_pose.header.frame_id = "/map";
+		        my_pose.pose.orientation.w = 1.0;
+
+		        path.poses.push_back(my_pose);
 
 
-	        maze[current_point->y][current_point->x] = -3;
-	        steps++;
+		        maze[current_point->y][current_point->x] = -3;
+		        steps++;
+		    }
+		    
+		    cout << "Shortest path:" << endl << endl;
+		    //print_maze (maze);
+		    cout << "Heading: " << find_heading(start) << endl;
+		    cout << "Total distance to next junction: " << steps_start << endl;
+		    cout << "Total steps: " << steps << endl;
+
 	    }
-	    
-	    cout << "Shortest path:" << endl << endl;
-	    //print_maze (maze);
-	    cout << "Heading: " << find_heading(start) << endl;
-	    cout << "Total distance to next junction: " << steps_start << endl;
-	    cout << "Total steps: " << steps << endl;
+
+
+
 	}
 
 
