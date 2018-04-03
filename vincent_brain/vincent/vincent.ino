@@ -3,6 +3,7 @@
 #include <Wire.h>
 #include "packet.h"
 #include "constants.h"
+#include <A4990MotorShield.h>
 
 /*
  * TODO:
@@ -33,7 +34,7 @@ volatile TDirection dir = STOP;
 #define COUNTS_PER_REV 95
 
 // Wheel circumference in cm.
-// We will use this to calculate forward/backward distance travelled 
+// We will use this to calculate forward/backward distance traveled 
 // by taking revs * WHEEL_CIRC
 #define WHEEL_CIRC 20.4
 
@@ -90,7 +91,7 @@ volatile unsigned long rightReverseTicksTurns;
 volatile unsigned long leftRevs;
 volatile unsigned long rightRevs;
 
-// Forward and backward distance travelled
+// Forward and backward distance traveled
 volatile unsigned long forwardDist;
 volatile unsigned long reverseDist;
 
@@ -114,6 +115,8 @@ volatile bool AUTONOMOUS_FLAG = false  ;
 
 // Store current Vincent mode (default as remote)
 bool isAuto = false;
+
+//A4990MotorShield motors;
 
 /* 
  *
@@ -846,9 +849,16 @@ void reverse(float dist, float speed)
 
 	// it is now moving
 	sendMoveOK();
-
+	
+	
+	//int rightVal = pwmVal(speed);
+	//int leftVal = rightVal - WHEEL_DIFF_BAC;
+	
+	
 	int leftVal = pwmVal(speed);
-	int rightVal = leftVal + WHEEL_DIFF_BAC;
+	//int rightVal = leftVal + WHEEL_DIFF_BAC;
+	
+	
 
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
@@ -859,7 +869,7 @@ void reverse(float dist, float speed)
 	// RF = Right forward pin, RR = Right reverse pin
 	// This will be replaced later with bare-metal code.
 	analogWrite(LR, leftVal);
-	analogWrite(RR, rightVal);
+	analogWrite(RR, leftVal);
 	analogWrite(LF, 0);
 	analogWrite(RF, 0);
 }
