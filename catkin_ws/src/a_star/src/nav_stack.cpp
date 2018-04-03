@@ -19,12 +19,13 @@ using namespace std;
 using namespace ros;
 
 
-int curr_x = 1, curr_y = 1;
-int end_x = 2, end_y = 2;
+int curr_x, curr_y;
+int end_x = 3 + 512, end_y = 3 + 512;
 nav_msgs::OccupancyGrid::Ptr local_map;
 nav_msgs::Path path;
 Publisher path_pub;
-
+Publisher endpoint_pub;
+int height_out, width_out;
 
 
 
@@ -54,7 +55,7 @@ private:
 	set<pair<int, int > > visited;
 
 	// Params to set
-	int probability = 0;
+	int probability = 10;
 	int mode = 1; 
 
 	// 0 means manhattan distance, 1 means cartesian distance
@@ -67,6 +68,9 @@ public:
 	a_star(const nav_msgs::OccupancyGrid::Ptr &data) {
 		this->height = data->info.height;
 		this->width = data->info.width;
+		height_out = this->height;
+		width_out = this->width;
+
 		int index = 0;
 
 	    for (int i = 0; i < height; ++i)
@@ -138,6 +142,7 @@ public:
 	                }
 	                if (visited.find(make_pair(neighbour->x, neighbour->y)) == visited.end() 
 	                	&& maze[(y+d)][(x+i)] <= probability 
+	                	//&& maze[y+d][x+i] != -1
 	                	) {
 	                    //open[neighbour->h_cost + neighbour->g_cost] = neighbour;
 	                    open.push_back(neighbour);
@@ -183,8 +188,9 @@ public:
 	void start_end_scan (coords_t *start, coords_t *end) {    
 	    // Dummy values 
 
-	    start->x = curr_x; start->y = curr_y;
+	    start->x = curr_x + width/2; start->y = curr_y + height/2;
 	    end->x = end_x; end->y = end_y;
+
 	    
 	    start->g_cost = 0;
 	    start->h_cost = cartesian_count(start->x, start->y, end->x, end->y);
@@ -229,10 +235,6 @@ public:
 	        }
 	    }
 	    return count;
-	}
-
-	void get_curr_point () {
-		cout << "Curr_point: " << maze[curr_y][curr_x] << endl;
 	}
 
 
@@ -280,8 +282,8 @@ public:
 		        }
 
 		        geometry_msgs::PoseStamped my_pose;
-		        my_pose.pose.position.x = current_point->x;
-		        my_pose.pose.position.y = current_point->y;
+		        my_pose.pose.position.x = current_point->x - width/2;
+		        my_pose.pose.position.y = current_point->y - height/2;
 		        my_pose.header.frame_id = "/map";
 		        my_pose.pose.orientation.w = 1.0;
 
@@ -298,6 +300,8 @@ public:
 		    cout << "Total distance to next junction: " << steps_start << endl;
 		    cout << "Total steps: " << steps << endl;
 
+	    }else {
+	    	cout << "endpoint not found" << endl;
 	    }
 
 
@@ -317,13 +321,21 @@ void pose_data_callback (const geometry_msgs::PoseStamped::Ptr& data) {
 
 	a_star graph(local_map);
 	graph.generate_path();
-	graph.get_curr_point();
 
 	// TODO: Publish the path properly and fix the crash when curr position = end position 
+	geometry_msgs::PoseStamped endpoint_pose;
+
+	endpoint_pose.pose.position.x = end_x;
+	endpoint_pose.pose.position.y = end_y;
+	endpoint_pose.header.frame_id = "/map";
+	endpoint_pose.pose.orientation.w = 1.0;
+
+
 	path.header.frame_id = "/map";
 	if (ok()) {
 		cout << "Path size: " << path.poses.size() << endl;
 		path_pub.publish(path);
+		endpoint_pub.publish(endpoint_pose);
 
 	}
 	path.poses.clear();
@@ -343,7 +355,7 @@ int main(int argc, char **argv){
 
     NodeHandle n;
     path_pub = n.advertise<nav_msgs::Path>("new_path", 1);
-
+    endpoint_pub = n.advertise<geometry_msgs::PoseStamped> ("end_point", 1);
 
     Subscriber sub = n.subscribe("/map", 1, map_callback); // This will call A* itself and control the systems  
     Subscriber sub3 = n.subscribe("/slam_out_pose", 1, pose_data_callback); // This will update global map metadata
