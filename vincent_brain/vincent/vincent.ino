@@ -108,7 +108,7 @@ unsigned long targetTicks;
 float currentSpeed;
 
 // Variable to store heading
-double heading;
+float heading;
 
 // Variables to track autonomous states
 volatile bool AUTONOMOUS_FLAG = false  ;
@@ -196,28 +196,29 @@ void lightRed();
  */
 void setup() {
 
-  // Setup PD4 as output pin for red led lighting
-  DDRD |= 0b00010000;
+	// Setup PD4 as output pin for red led lighting
+	DDRD |= 0b00010000;
 
-  cli();
-  setupEINT();
-  setupSerial();
-  startSerial();
-  setupMotors();
-  startMotors();
-  enablePullups();
-  initializeState();
-  sei();
-  
-  // Compute Vincent's diagonal and circumference
-  vincentDiagonal = sqrt((VINCENT_LENGTH * VINCENT_LENGTH) 
-    + (VINCENT_BREADTH * VINCENT_BREADTH));
+	cli();
+	setupEINT();
+	setupSerial();
+	startSerial();
+	setupMotors();
+	startMotors();
+	enablePullups();
+	initializeState();
+	sei();
 
-  vincentCirc = PI * vincentDiagonal;
-  Wire.beginTransmission(MAG_address);
-  Wire.write((byte)0x02);
-  Wire.write((byte)0x00);
-  Wire.endTransmission();
+	// Compute Vincent's diagonal and circumference
+	vincentDiagonal = sqrt((VINCENT_LENGTH * VINCENT_LENGTH) 
+			+ (VINCENT_BREADTH * VINCENT_BREADTH));
+
+	vincentCirc = PI * vincentDiagonal;
+	
+	Wire.beginTransmission(MAG_address);
+	Wire.write((byte)0x10);
+	Wire.write((byte)0x01);
+	Wire.endTransmission();
 }
 
 /*
@@ -226,12 +227,15 @@ void setup() {
  *
  */
 void loop() {
+<<<<<<< HEAD
+=======
 	/* BROKEN
 	   int MAG_x, MAG_y, MAG_z;
 	   MAG(&MAG_x, &MAG_y, &MAG_z);
 	   heading = atan2((double)MAG_y,(double)MAG_x);
 	 */
 
+>>>>>>> 0c5c68f49c21629eeaff582905b96db621b58172
 	// Check when Vincent can stop moving forward/backward after
 	// it is given a fixed distance to move forward/backward
 	if (deltaDist > 0) {
@@ -472,8 +476,20 @@ void sendReady() {
 	sendResponse(&readyPacket);
 }
 
+<<<<<<< HEAD
+void sendHeading() {
+        TPacket headingPacket;
+        headingPacket.packetType = PACKET_TYPE_RESPONSE;
+        headingPacket.command = RESP_HEADING;
+	headingPacket.params[0] = heading;
+        sendResponse(&headingPacket);
+}
+
+void sendResponse(TPacket *packet) {
+=======
 void sendResponse(TPacket *packet)
 {
+>>>>>>> 0c5c68f49c21629eeaff582905b96db621b58172
 	// Takes a packet, serializes it then sends it out
 	// over the serial port.
 	char buffer[PACKET_SIZE];
@@ -536,6 +552,11 @@ void handleCommand(TPacket *command)
 			isAuto = false;
 			sendOK();
 			sendReady();
+			break;
+		case COMMAND_GET_HEADING:
+			sendOK();
+			getHeading();
+			sendHeading();
 			break;
 		default:
 			sendBadCommand();
@@ -809,7 +830,6 @@ void forward(float dist, float speed)
 	// it is now moving
 	sendMoveOK();
 
-	
 	int leftVal = pwmVal(speed);
 	int rightVal = leftVal + WHEEL_DIFF_FOR;
 
@@ -1015,28 +1035,30 @@ void stop()
  * 
  */
 
-
 void MAG(int *x, int *y, int *z) {
 	//Tell the MAg3110 where to begin reading data
 	Wire.beginTransmission(MAG_address);
-	Wire.write((byte)0x03); //select register 3, X MSB register
+	Wire.write((byte)0x01); //select register 1
 	Wire.endTransmission();
 
 	//Read data from each axis, 2 registers per axis
 	Wire.requestFrom(MAG_address, 6);
-	if(6<=Wire.available()){
+	if (Wire.available() == 6){
 		*x = Wire.read() << 8; //X msb
 		*x |= Wire.read();     //X lsb
-		*z = Wire.read() << 8; //Z msb
-		*z |= Wire.read();     //Z lsb
 		*y = Wire.read() << 8; //Y msb
 		*y |= Wire.read();     //Y lsb
+		*z = Wire.read() << 8; //Z msb
+                *z |= Wire.read();     //Z lsb
+	} else {   //return 0 value when data is unavailable or component is unplugged or malfuntioning
+		*x=0; *y=0; *z=0;
 	}
-	else{   //return 0 value when data is unavailable or component is unplugged or malfuntioning
-		*x=0;
-		*y=0;
-		*z=0;
-	}
+}
+
+void getHeading() {
+	int MAG_x, MAG_y, MAG_z;
+	MAG(&MAG_x, &MAG_y, &MAG_z);
+	heading = atan2((double)MAG_y,(double)MAG_x);
 }
 
 // Clears all our counters
