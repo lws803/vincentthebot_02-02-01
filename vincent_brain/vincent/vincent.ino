@@ -193,24 +193,28 @@ void lightRed();
  */
 void setup() {
 
-	// Setup PD4 as output pin for red led lighting
-	DDRD |= 0b00010000;
+  // Setup PD4 as output pin for red led lighting
+  DDRD |= 0b00010000;
 
-	cli();
-	setupEINT();
-	setupSerial();
-	startSerial();
-	setupMotors();
-	startMotors();
-	enablePullups();
-	initializeState();
-	sei();
+  cli();
+  setupEINT();
+  setupSerial();
+  startSerial();
+  setupMotors();
+  startMotors();
+  enablePullups();
+  initializeState();
+  sei();
+  
+  // Compute Vincent's diagonal and circumference
+  vincentDiagonal = sqrt((VINCENT_LENGTH * VINCENT_LENGTH) 
+    + (VINCENT_BREADTH * VINCENT_BREADTH));
 
-	// Compute Vincent's diagonal and circumference
-	vincentDiagonal = sqrt((VINCENT_LENGTH * VINCENT_LENGTH) 
-			+ (VINCENT_BREADTH * VINCENT_BREADTH));
-
-	vincentCirc = PI * vincentDiagonal;
+  vincentCirc = PI * vincentDiagonal;
+  Wire.beginTransmission(MAG_address);
+  Wire.write((byte)0x02);
+  Wire.write((byte)0x00);
+  Wire.endTransmission();
 }
 
 /*
