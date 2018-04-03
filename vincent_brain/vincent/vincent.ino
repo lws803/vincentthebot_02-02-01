@@ -211,6 +211,10 @@ void setup() {
     + (VINCENT_BREADTH * VINCENT_BREADTH));
 
   vincentCirc = PI * vincentDiagonal;
+  Wire.beginTransmission(MAG_address);
+  Wire.write((byte)0x02);
+  Wire.write((byte)0x00);
+  Wire.endTransmission();
 }
 
 /*
