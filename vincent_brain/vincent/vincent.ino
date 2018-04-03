@@ -1,6 +1,7 @@
 #include <serialize.h>
 #include <math.h>
 #include <Wire.h>
+#include <string.h>
 #include "packet.h"
 #include "constants.h"
 #include <A4990MotorShield.h>
@@ -31,7 +32,7 @@ volatile TDirection dir = STOP;
 
 // Number of ticks per revolution from the 
 // wheel encoder.
-#define COUNTS_PER_REV 95
+#define COUNTS_PER_REV 140
 
 // Wheel circumference in cm.
 // We will use this to calculate forward/backward distance traveled 
@@ -638,7 +639,7 @@ void leftISR()
 	}
 	else if (dir == BACKWARD) {
 		leftReverseTicks++;
-		reverseDist = (unsigned long) ((float) leftReverseTicks /COUNTS_PER_REV * WHEEL_CIRC);
+		reverseDist = (unsigned long) ((float) leftReverseTicks / COUNTS_PER_REV * WHEEL_CIRC);
 	}
 	else if (dir == RIGHT) {
 		//rightReverseTicksTurns++;
@@ -651,9 +652,13 @@ void leftISR()
 
 void rightISR()
 {
-	if (dir == FORWARD) rightForwardTicks++;
-	else if (dir == BACKWARD) rightReverseTicks++;
-	else if (dir == LEFT) {
+	if (dir == FORWARD) {
+		rightForwardTicks++;
+		forwardDist = (unsigned long) ((float) rightForwardTicks / COUNTS_PER_REV * WHEEL_CIRC);
+	} else if (dir == BACKWARD) {
+		rightReverseTicks++;
+		reverseDist = (unsigned long) ((float) rightReverseTicks / COUNTS_PER_REV * WHEEL_CIRC);
+	} else if (dir == LEFT) {
 		//rightReverseTicksTurns++;
 		rightForwardTicksTurns++;
 	}  
@@ -836,7 +841,7 @@ void forward(float dist, float speed)
 	analogWrite(LR,0);
 	analogWrite(RR, 0);*/
 	
-	motors.setSpeeds(speed, speed);
+	motors.setSpeeds(speed, 0.97*speed);
 }
 
 // Reverse Vincent "dist" cm at speed "speed".
@@ -869,7 +874,7 @@ void reverse(float dist, float speed)
 	newDist = reverseDist + deltaDist;
 
 	
-	motors.setSpeeds(-speed, -speed);
+	motors.setSpeeds(-speed, -0.97*speed);
 	
 	
 	// LF = Left forward pin, LR = Left reverse pin
@@ -1020,10 +1025,7 @@ void stop()
 {
 	dir = STOP;
 
-	analogWrite(LF, 0);
-	analogWrite(LR, 0);
-	analogWrite(RF, 0);
-	analogWrite(RR, 0);
+	motors.setSpeeds(0,0);
 
 	sendStopOK();
 	sendReady();
