@@ -211,9 +211,10 @@ void setup() {
 			+ (VINCENT_BREADTH * VINCENT_BREADTH));
 
 	vincentCirc = PI * vincentDiagonal;
+	
 	Wire.beginTransmission(MAG_address);
-	Wire.write((byte)0x02);
-	Wire.write((byte)0x00);
+	Wire.write((byte)0x10);
+	Wire.write((byte)0x01);
 	Wire.endTransmission();
 }
 
@@ -1027,23 +1028,20 @@ void stop()
 void MAG(int *x, int *y, int *z) {
 	//Tell the MAg3110 where to begin reading data
 	Wire.beginTransmission(MAG_address);
-	Wire.write((byte)0x03); //select register 3, X MSB register
+	Wire.write((byte)0x01); //select register 1
 	Wire.endTransmission();
 
 	//Read data from each axis, 2 registers per axis
 	Wire.requestFrom(MAG_address, 6);
-	if(6<=Wire.available()){
+	if (Wire.available() == 6){
 		*x = Wire.read() << 8; //X msb
 		*x |= Wire.read();     //X lsb
-		*z = Wire.read() << 8; //Z msb
-		*z |= Wire.read();     //Z lsb
 		*y = Wire.read() << 8; //Y msb
 		*y |= Wire.read();     //Y lsb
-	}
-	else{   //return 0 value when data is unavailable or component is unplugged or malfuntioning
-		*x=0;
-		*y=0;
-		*z=0;
+		*z = Wire.read() << 8; //Z msb
+                *z |= Wire.read();     //Z lsb
+	} else {   //return 0 value when data is unavailable or component is unplugged or malfuntioning
+		*x=0; *y=0; *z=0;
 	}
 }
 
