@@ -116,7 +116,7 @@ volatile bool AUTONOMOUS_FLAG = false  ;
 // Store current Vincent mode (default as remote)
 bool isAuto = false;
 
-//A4990MotorShield motors;
+A4990MotorShield motors;
 
 /* 
  *
@@ -227,15 +227,7 @@ void setup() {
  *
  */
 void loop() {
-<<<<<<< HEAD
-=======
-	/* BROKEN
-	   int MAG_x, MAG_y, MAG_z;
-	   MAG(&MAG_x, &MAG_y, &MAG_z);
-	   heading = atan2((double)MAG_y,(double)MAG_x);
-	 */
 
->>>>>>> 0c5c68f49c21629eeaff582905b96db621b58172
 	// Check when Vincent can stop moving forward/backward after
 	// it is given a fixed distance to move forward/backward
 	if (deltaDist > 0) {
@@ -476,20 +468,15 @@ void sendReady() {
 	sendResponse(&readyPacket);
 }
 
-<<<<<<< HEAD
 void sendHeading() {
         TPacket headingPacket;
         headingPacket.packetType = PACKET_TYPE_RESPONSE;
         headingPacket.command = RESP_HEADING;
-	headingPacket.params[0] = heading;
+		headingPacket.params[0] = heading;
         sendResponse(&headingPacket);
 }
 
 void sendResponse(TPacket *packet) {
-=======
-void sendResponse(TPacket *packet)
-{
->>>>>>> 0c5c68f49c21629eeaff582905b96db621b58172
 	// Takes a packet, serializes it then sends it out
 	// over the serial port.
 	char buffer[PACKET_SIZE];
@@ -1049,7 +1036,7 @@ void MAG(int *x, int *y, int *z) {
 		*y = Wire.read() << 8; //Y msb
 		*y |= Wire.read();     //Y lsb
 		*z = Wire.read() << 8; //Z msb
-                *z |= Wire.read();     //Z lsb
+        *z |= Wire.read();     //Z lsb
 	} else {   //return 0 value when data is unavailable or component is unplugged or malfuntioning
 		*x=0; *y=0; *z=0;
 	}
