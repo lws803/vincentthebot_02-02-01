@@ -223,6 +223,15 @@ void setup() {
  *
  */
 void loop() {
+<<<<<<< HEAD
+=======
+	/* BROKEN
+	   int MAG_x, MAG_y, MAG_z;
+	   MAG(&MAG_x, &MAG_y, &MAG_z);
+	   heading = atan2((double)MAG_y,(double)MAG_x);
+	 */
+
+>>>>>>> 0c5c68f49c21629eeaff582905b96db621b58172
 	// Check when Vincent can stop moving forward/backward after
 	// it is given a fixed distance to move forward/backward
 	if (deltaDist > 0) {
@@ -251,75 +260,74 @@ void loop() {
 	// it is given a fixed angle to turn left/right
 	if (deltaTicks > 0) {
 		if (dir == LEFT) {
-			if (rightForwardTicksTurns >= targetTicks) 
+			if (rightForwardTicksTurns >= targetTicks) {
 				deltaTicks = 0;
-			targetTicks = 0;
-			stop();
+				targetTicks = 0;
+				stop();
+			}
 		}
-	}
-	else if (dir == RIGHT) {
-		if (leftForwardTicksTurns >= targetTicks) {
+		else if (dir == RIGHT) {
+			if (leftForwardTicksTurns >= targetTicks) {
+				deltaTicks = 0;
+				targetTicks = 0;
+				stop();
+			}
+		}
+		else if (dir == STOP) {
 			deltaTicks = 0;
 			targetTicks = 0;
 			stop();
 		}
 	}
-	else if (dir == STOP) {
-		deltaTicks = 0;
-		targetTicks = 0;
-		stop();
-	}
-}
 
-// Retrieve packets from RasPi and handle them
-TPacket recvPacket; // This holds commands from the Pi
-TResult result = readPacket(&recvPacket);
+	// Retrieve packets from RasPi and handle them
+	TPacket recvPacket; // This holds commands from the Pi
+	TResult result = readPacket(&recvPacket);
 
-// Handle packets differently if autonomous or remote
-// 
-// TODO: Do we really need to handle packets this way during 
-// autonomous mode? Is it needed?
-/*
-   if (isAuto) {
-   if (result == PACKET_AUTO_OK) {
-   handlePacket(&recvPacket);
-   } else {
-   if (result == PACKET_BAD) {
-   sendBadPacket();
-   } else {
-   if (result == PACKET_CHECKSUM_BAD)
-   sendBadChecksum();
-   }
-   }
+	// Handle packets differently if autonomous or remote
+	// 
+	// TODO: Do we really need to handle packets this way during 
+	// autonomous mode? Is it needed?
+	/*
+	   if (isAuto) {
+	   if (result == PACKET_AUTO_OK) {
+	   handlePacket(&recvPacket);
+	   } else {
+	   if (result == PACKET_BAD) {
+	   sendBadPacket();
+	   } else {
+	   if (result == PACKET_CHECKSUM_BAD)
+	   sendBadChecksum();
+	   }
+	   }
 
-   } else {
-   if(result == PACKET_OK)
-   handlePacket(&recvPacket);
-   else
-   if(result == PACKET_BAD)
-   {
-   sendBadPacket();
-   }
-   else
-   if(result == PACKET_CHECKSUM_BAD)
-   sendBadChecksum();
-   }
- */
+	   } else {
+	   if(result == PACKET_OK)
+	   handlePacket(&recvPacket);
+	   else
+	   if(result == PACKET_BAD)
+	   {
+	   sendBadPacket();
+	   }
+	   else
+	   if(result == PACKET_CHECKSUM_BAD)
+	   sendBadChecksum();
+	   }
+	 */
 
-if(result == PACKET_OK) {
-	handlePacket(&recvPacket);
-} else {
-	if(result == PACKET_BAD)
-	{
-		sendBadPacket();
-	}
-	else {
-		if(result == PACKET_CHECKSUM_BAD) {
-			sendBadChecksum();
+	if(result == PACKET_OK) {
+		handlePacket(&recvPacket);
+	} else {
+		if(result == PACKET_BAD) 
+		{
+			sendBadPacket();
 		}
-
+		else {
+			if(result == PACKET_CHECKSUM_BAD) {
+				sendBadChecksum();
+			}
+		}
 	}
-}
 }
 
 /*
@@ -464,6 +472,7 @@ void sendReady() {
 	sendResponse(&readyPacket);
 }
 
+<<<<<<< HEAD
 void sendHeading() {
         TPacket headingPacket;
         headingPacket.packetType = PACKET_TYPE_RESPONSE;
@@ -473,6 +482,10 @@ void sendHeading() {
 }
 
 void sendResponse(TPacket *packet) {
+=======
+void sendResponse(TPacket *packet)
+{
+>>>>>>> 0c5c68f49c21629eeaff582905b96db621b58172
 	// Takes a packet, serializes it then sends it out
 	// over the serial port.
 	char buffer[PACKET_SIZE];
@@ -489,7 +502,7 @@ void handleCommand(TPacket *command)
 		// For forward/reverse commands, param[0] = distance, param[1] = speed.
 		// For turn left/right commands, param[0] = angle, param[1] = speed;
 		// For adjust left/right commands, param[0] = increment;
-		case: COMMAND_FORWARD:
+		case COMMAND_FORWARD:
 			sendOK();
 			forward((float) command->params[0], (float) command->params[1]);
 			break;
@@ -639,7 +652,7 @@ void leftISR()
 		//rightReverseTicksTurns++;
 		leftForwardTicksTurns++;
 	}
-
+	//sendMessage("left\n");
 	//Serial.print("DIST: ");
 	//Serial.println(forwardDist);
 }
@@ -813,13 +826,8 @@ void forward(float dist, float speed)
 	// it is now moving
 	sendMoveOK();
 
-	/*
-	 * int leftVal = pwmVal(speed);
-	 * int rightVal = leftVal + WHEEL_DIFF_FOR;
-	 */
-
-	int rightVal = pwmVal(speed);
-	int leftVal = rightVal - WHEEL_DIFF_FOR;
+	int leftVal = pwmVal(speed);
+	int rightVal = leftVal + WHEEL_DIFF_FOR;
 
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
@@ -858,13 +866,8 @@ void reverse(float dist, float speed)
 	// it is now moving
 	sendMoveOK();
 
-	/*
-	 * int leftVal = pwmVal(speed);
-	 * int rightVal = leftVal + WHEEL_DIFF_BAC;
-	 */
-
-	int rightVal = pwmVal(speed);
-	int leftVal = rightVal - WHEEL_DIFF_BAC;
+	int leftVal = pwmVal(speed);
+	int rightVal = leftVal + WHEEL_DIFF_BAC;
 
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
