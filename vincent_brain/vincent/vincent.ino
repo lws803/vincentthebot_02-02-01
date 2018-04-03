@@ -116,6 +116,7 @@ volatile bool AUTONOMOUS_FLAG = false  ;
 // Store current Vincent mode (default as remote)
 bool isAuto = false;
 
+// declare motor 1 and motor 2 object from motor library
 A4990MotorShield motors;
 
 /* 
@@ -817,8 +818,8 @@ void forward(float dist, float speed)
 	// it is now moving
 	sendMoveOK();
 
-	int leftVal = pwmVal(speed);
-	int rightVal = leftVal + WHEEL_DIFF_FOR;
+	//int leftVal = pwmVal(speed);
+	//int rightVal = leftVal + WHEEL_DIFF_FOR;
 
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
@@ -828,17 +829,14 @@ void forward(float dist, float speed)
 	// LF = Left forward pin, LR = Left reverse pin
 	// RF = Right forward pin, RR = Right reverse pin
 	// This will be replaced later with bare-metal code.
-
-
-	/* 
-	   OCR0A = leftVal;
-	 */
-
-
+	
+	/*
 	analogWrite(LF, leftVal);
 	analogWrite(RF, rightVal);
 	analogWrite(LR,0);
-	analogWrite(RR, 0);
+	analogWrite(RR, 0);*/
+	
+	motors.setSpeeds(speed, speed);
 }
 
 // Reverse Vincent "dist" cm at speed "speed".
@@ -862,23 +860,28 @@ void reverse(float dist, float speed)
 	//int leftVal = rightVal - WHEEL_DIFF_BAC;
 	
 	
-	int leftVal = pwmVal(speed);
+	//int leftVal = pwmVal(speed);
 	//int rightVal = leftVal + WHEEL_DIFF_BAC;
-	
-	
 
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
 	else deltaDist = 9999999;
 	newDist = reverseDist + deltaDist;
 
+	
+	motors.setSpeeds(-speed, -speed);
+	
+	
 	// LF = Left forward pin, LR = Left reverse pin
 	// RF = Right forward pin, RR = Right reverse pin
 	// This will be replaced later with bare-metal code.
-	analogWrite(LR, leftVal);
+	
+	/*analogWrite(LR, leftVal);
 	analogWrite(RR, leftVal);
 	analogWrite(LF, 0);
 	analogWrite(RF, 0);
+	*/
+	
 }
 
 // Function to estimate number of wheel ticks needed
@@ -906,8 +909,8 @@ void left(float ang, float speed)
 	 * 
 	 */
 
-	int leftVal = pwmVal(speed);
-	int rightVal = leftVal + WHEEL_DIFF_FOR;  
+	//int leftVal = pwmVal(speed);
+	//int rightVal = leftVal + WHEEL_DIFF_FOR;  
 
 	// it is now moving
 	sendMoveOK();
@@ -919,10 +922,13 @@ void left(float ang, float speed)
 
 	// To turn left we reverse the left wheel and move
 	// the right wheel forward.
-	analogWrite(LR, 0);
-	analogWrite(RF, rightVal);
-	analogWrite(LF, 0);
-	analogWrite(RR, 0);
+	//analogWrite(LR, 0);
+	//analogWrite(RF, rightVal);
+	//analogWrite(LF, 0);
+	//analogWrite(RR, 0);
+	
+	// left motor does nothing, right motor moves
+	motors.setSpeeds(0, speed);
 }
 
 // Turn Vincent right "ang" degrees at speed "speed".
@@ -935,8 +941,8 @@ void right(float ang, float speed)
 	// Set the direction of travel
 	dir = RIGHT;
 
-	int leftVal = pwmVal(speed);
-	int rightVal = leftVal + WHEEL_DIFF_FOR;
+	//int leftVal = pwmVal(speed);
+	//int rightVal = leftVal + WHEEL_DIFF_FOR;
 
 	// it is now moving
 	sendMoveOK();
@@ -948,10 +954,12 @@ void right(float ang, float speed)
 
 	// To turn right we reverse the right wheel and move
 	// the left wheel forward.
-	analogWrite(RR, 0);
-	analogWrite(LF, leftVal);
-	analogWrite(LR, 0);
-	analogWrite(RF, 0);
+	//analogWrite(RR, 0);
+	//analogWrite(LF, leftVal);
+	//analogWrite(LR, 0);
+	//analogWrite(RF, 0);
+
+	motors.setSpeeds(speed, 0);
 }
 
 // Adjust Vincent left given degree of adjust
@@ -965,13 +973,15 @@ void adjustLeft(float increment)
 	// wheel directions. The Right-Forward is greater than
 	// Left-Forward with the difference depended on degree of
 	// adjustment
-	int leftVal = pwmVal(currentSpeed);
-	int rightVal = pwmVal(currentSpeed + increment);
-
-	analogWrite(LF, leftVal);
-	analogWrite(RF, rightVal);
-	analogWrite(LR, 0);
-	analogWrite(RR, 0);
+	//int leftVal = pwmVal(currentSpeed);
+	//int rightVal = pwmVal(currentSpeed + increment);
+	
+	motors.setSpeeds(currentSpeed, currentSpeed + increment);
+	
+	//analogWrite(LF, leftVal);
+	//analogWrite(RF, rightVal);
+	//analogWrite(LR, 0);
+	//analogWrite(RR, 0);
 }
 
 // Adjust Vincent right given degree of adjust
@@ -985,14 +995,16 @@ void adjustRight(float increment)
 	// wheel directions. The Left-Forward is greater than
 	// Right-Forward with the difference depended on degree of
 	// adjustment
-	int rightVal = pwmVal(currentSpeed);
-	int leftVal = pwmVal(currentSpeed + increment);
+	//int rightVal = pwmVal(currentSpeed);
+	//int leftVal = pwmVal(currentSpeed + increment);
 
+	motors.setSpeeds(currentSpeed + increment, currentSpeed);
+	
 	// Write the values to motors
-	analogWrite(RF, rightVal);
-	analogWrite(LF, leftVal);
-	analogWrite(RR, 0);
-	analogWrite(LR, 0);
+	//analogWrite(RF, rightVal);
+	//analogWrite(LF, leftVal);
+	//analogWrite(RR, 0);
+	//analogWrite(LR, 0);
 }
 
 // Determine if Vincent requires left/right adjustment by checking
@@ -1045,7 +1057,7 @@ void MAG(int *x, int *y, int *z) {
 void getHeading() {
 	int MAG_x, MAG_y, MAG_z;
 	MAG(&MAG_x, &MAG_y, &MAG_z);
-	heading = atan2((double)MAG_y,(double)MAG_x);
+	heading = atan2((float)MAG_y,(float)MAG_x);
 }
 
 // Clears all our counters
