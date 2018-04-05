@@ -31,7 +31,8 @@ typedef enum
   RESP_BAD_AUTO = 7,
   RESP_STOP = 8,
   RESP_MOVE = 9,
-  RESP_READY = 10
+  RESP_READY = 10,
+  RESP_HEADING = 11
   
 } TResponseType;
 
@@ -51,7 +52,8 @@ typedef enum
   COMMAND_GET_STATS = 7,
   COMMAND_CLEAR_STATS = 8,
   COMMAND_AUTO_MODE = 9,
-  COMMAND_REMOTE_MODE = 10
+  COMMAND_REMOTE_MODE = 10,
+  COMMAND_GET_HEADING = 11
   
 } TCommandType;
 #endif
