@@ -15,21 +15,22 @@
 
 using namespace std;
 
-#define PORT_NAME			"/dev/ttyACM0"
-#define BAUD_RATE			B9600
+#define PORT_NAME					"/dev/ttyACM0"
+#define BAUD_RATE					B9600
 
 // Defined constants to indicate directions, distance and speed
-#define DEFAULT_SPEED 100 // Default move/turn speed
-#define DEFAULT_LEFT_TURN_SPEED 100 // Default left turn speed
-#define DEFAULT_RIGHT_TURN_SPEED 100 // Default right turn speed
-#define GRID_UNIT_DISTANCE 20 // Assume grid unit distance to be wheel circumference
+#define DEFAULT_SPEED				100 // Default move/turn speed
+#define DEFAULT_LEFT_TURN_SPEED		100 // Default left turn speed
+#define DEFAULT_RIGHT_TURN_SPEED	100 // Default right turn speed
+#define GRID_UNIT_DISTANCE			20 // Assume grid unit distance to be wheel circumference
 // Defined constants for movement command type
-#define MOVE_COMMAND 0 // For forward/backward
-#define TURN_COMMAND 1 // For turning
-#define NON_MOVEMENT_COMMAND 2 // For non movement commands
-#define END_COMMAND 3 // Vincent has reached the end point
-// Local program commands
-#define PRINT_STACK_COMMAND 100
+#define MOVE_COMMAND 				0 // For forward/backward
+#define TURN_COMMAND 				1 // For turning
+#define NON_MOVEMENT_COMMAND 		2 // For non movement commands
+#define END_COMMAND 				3 // Vincent has reached the end point
+#define UNDO_COMMAND 				4 // Command to specify undo action
+// Max retries for failed autonomous command
+#define MAX_AUTO_FAIL 				5
 
 /*
  * Structures definitions
@@ -78,12 +79,14 @@ void sendPacket(TPacket *packet);
 void *receiveThread(void *p);
 // Process MANUAL commands
 void printInstructions(float *currHead, float *nextHead, int *steps, rawDataCommandPair *pair);
+void printCommandList();
 commandTuple executeUserCommand();
 void flushInput();
 float getParams(TPacket *commandPacket);
 float sendCommand(char command);
 void invertCommand(commandTuple *tup);
 void pushCmdToStack(commandTuple *tup);
+void pushToStack();
 void popFromStack();
 void printCmdStack();
 void processCommand(commandTuple cmdTup);
@@ -117,12 +120,15 @@ int main()
 	// Autonomous packet
 	TPacket autoPacket;
 	autoPacket.packetType = PACKET_TYPE_AUTO;
+	// Falied autonomous command counter
+	int autoFailedCount = 0;
 	
 	// Create a new screen output file
 	//outputFile.open("output.txt");
 
 	while(!exitFlag)
 	{	
+		/*
 		// Wait for Arduino to send the ready status to indicate ready
 		// to receive the next command
 		bool rdyMsg = false;
@@ -132,30 +138,43 @@ int main()
 				rdyMsg = true;
 			}
 		}
+		*/
 
 		/* 
-		 * General Movement goes here
+		 * TWO different modes of movement
+		 * AUTONOMOUS
+		 * 	Vincent moves semi autonomously by reading commands
+		 * 	from the command stack.
+		 * 	One command, one movement. 
+		 * 	Vincent only reads the next command when Arduino sends
+		 * 	back a "ready" packet back.
+		 * 
+		 * REMOTE
+		 * 	Vincent moves based on the command input by operator.
+		 * 	Vincent only reads the next command when Arduino sends
+		 * 	back a "ready" packet back.
 		 */
 		if (AUTONOMOUS_FLAG) {
-			// Wait for 2 seconds for RPi to get OK from Arduino
-			// BROKEN
-			//printf("auto on!!!!!\n");
-			//sleep(2);
+			// Check if the backtracking command stack is empty
+			// If it is, stop autonomous mode
+			if (backStack.empty() || autoFailedCount == MAX_AUTO_FAIL) {
+				AUTONOMOUS_FLAG = false;
+				continue;
+			}
+			
 			// Continuously process autonomous commands
 			// Inform Arduino incoming autonomous packet
 			sendPacket(&autoPacket);
 			if (AUTO_RECEIVE_OK) {
 				// Process the next command
-				if (!backStack.empty()) {
-					backStack.pop_back();
-					processCommand(backStack.back());
-				}
+				backStack.pop_back();
+				processCommand(backStack.back());
+				autoFailedCount = 0;
 			}
 			else {
 				// Re-process the current failed command
-				if (!backStack.empty()) {
-					processCommand(backStack.back());
-				}
+				processCommand(backStack.back());
+				autoFailedCount++;
 			}
 		}
 		else {
@@ -168,9 +187,18 @@ int main()
 			
 			printf("HEADING: %f\n", currentHeading);
 			
+			// If the turn angle is zero, we know we only needs to move
+			// forward/backward
 			if (get<1>(get<0>(cmdPair)) == 0) {
-				// Get the forward/backward input
-				inputCmd = executeUserCommand();
+				
+				// Place the input request in loop for undo ability
+				do {
+					printCommandList();
+					// Get the forward/backward input
+					inputCmd = executeUserCommand();
+				} while (get<0>(inputCmd) == UNDO_COMMAND);
+				
+				// All movement commands get pushed to the stack
 				if (get<0>(inputCmd) != NON_MOVEMENT_COMMAND) {
 					// Invert the input commands for future back tracking
 					invertCommand(&inputCmd);
@@ -180,15 +208,28 @@ int main()
 			}
 			// We need to process both turn and forward/backward
 			else {
-				// Get the turn input
-				inputCmd = executeUserCommand();
+				// Place the input request in loop for undo ability
+				do {
+					printCommandList();
+					// Get the forward/backward input
+					inputCmd = executeUserCommand();
+				} while (get<0>(inputCmd) == UNDO_COMMAND);
+				
+				// Push command to stack
 				if (get<0>(inputCmd) != NON_MOVEMENT_COMMAND) {
 					// Invert the input commands for future back tracking
 					invertCommand(&inputCmd);
 					pushCmdToStack(&inputCmd);
 				}
-				// Get the forward/backward input
-				inputCmd = executeUserCommand();
+				
+				// Place the input request in loop for undo ability
+				do {
+					printCommandList();
+					// Get the forward/backward input
+					inputCmd = executeUserCommand();
+				} while (get<0>(inputCmd) == UNDO_COMMAND);
+				
+				// Push command to stack
 				if (get<0>(inputCmd) != NON_MOVEMENT_COMMAND) {
 					// Invert the input commands for future back tracking
 					invertCommand(&inputCmd);
@@ -402,11 +443,7 @@ void printInstructions(float *currHead, float *nextHead, int *steps, rawDataComm
 	printf("****************************************\n\n");
 }
 
-// This simply executes the command 
-commandTuple executeUserCommand() {	
-	commandTuple cmdTup;			
-	char ch;
-	
+void printCommandList() {
 	printf("******************************\n");
 	printf("Commands:\n");
 	printf("f ---- forward\n");
@@ -421,8 +458,18 @@ commandTuple executeUserCommand() {
 	printf("a ---- autonomous mode\n");
 	printf("p ---- print the command stack\n");
 	printf("o ---- pop most recent command from stack\n");
+	printf("i ---- push a custom command into the stack\n");
 	printf("q ---- exit\n");
 	printf("******************************\n");
+}
+
+// This simply executes the command 
+commandTuple executeUserCommand() {	
+	commandTuple cmdTup;			
+	char ch;
+	float value = 0;
+	
+	// Request user for command
 	printf("Input: ");
 	scanf("%c", &ch);
 	printf("\n\n");
@@ -430,8 +477,25 @@ commandTuple executeUserCommand() {
 	// Purge extraneous characters from input stream
 	flushInput();
 	
-	float value = sendCommand(ch);
+	// Check if input conflicts with Arduino
+	// If Arduino is not ready and user tries to input a movement
+	// command that is not "Stop", we prevent the command from sending
+	if (!(READY_FLAG || ch == 's')) {
+		printf("Arduino is not ready! Stop Vincent first.\n\n");
+		get<0>(cmdTup) = UNDO_COMMAND;
+		return cmdTup;
+	}
 	
+	// Process the character input and send to Arduino
+	value = sendCommand(ch);
+	
+	// Undo option in the case where user wants to change command
+	if (value < 0) {
+		get<0>(cmdTup) = UNDO_COMMAND;
+		return cmdTup;
+	}
+	
+	// Build the command tuple
 	if (ch == 'f' || ch == 'F' ||ch == 'b' || ch == 'B') {
 		get<0>(cmdTup) = MOVE_COMMAND;
 		get<1>(cmdTup).push_back(ch);
@@ -442,19 +506,11 @@ commandTuple executeUserCommand() {
 	}
 	else {
 		get<0>(cmdTup) = NON_MOVEMENT_COMMAND;
-		
 	}
-	
 	get<2>(cmdTup) = value;
 	
 	return cmdTup;
 }
-
-/* This takes in the raw data command pair and does TWO things:
- * 
- * 1. Invert the commands for backtracking in future
- * 2. Push the inverted commands into the backtracking stack
- */
 
 void flushInput()
 {
@@ -464,20 +520,27 @@ void flushInput()
 
 float getParams(TPacket *commandPacket)
 {
-	int value;
+	int value, power;
 	printf("Enter distance/angle in cm/degrees (e.g. 50) and power in %% (e.g. 75) separated by space.\n");
 	printf("E.g. 50 75 means go at 50 cm at 75%% power for forward/backward, or 50 degrees left or right turn at 75%%  power\n");
-	scanf("%d %d", &value, &commandPacket->params[1]);
+	printf("TO UNDO: Input negative for any of the values.\n");
+	scanf("%d %d", &value, &power);
 	flushInput();
 	printf("\n\n");
 	
+	// Undo option
+	if (value < 0 || power < 0) {
+		return -1;
+	}
+	
+	// Build the command packet with given input
+	commandPacket->params[1] = power;
 	commandPacket->params[0] = value;
 	
 	return (float)value;
 }
 
-float sendCommand(char command)
-{
+float sendCommand(char command) {
 	TPacket commandPacket;
 	commandPacket.packetType = PACKET_TYPE_COMMAND;
 
@@ -488,6 +551,7 @@ float sendCommand(char command)
 		case 'f':
 		case 'F':
 			value = getParams(&commandPacket);
+			if (value < 0) return value;
 			commandPacket.command = COMMAND_FORWARD;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
@@ -496,6 +560,7 @@ float sendCommand(char command)
 		case 'b':
 		case 'B':
 			value = getParams(&commandPacket);
+			if (value < 0) return value;
 			commandPacket.command = COMMAND_REVERSE;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
@@ -504,6 +569,7 @@ float sendCommand(char command)
 		case 'l':
 		case 'L':
 			value = getParams(&commandPacket);
+			if (value < 0) return value;
 			commandPacket.command = COMMAND_TURN_LEFT;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
@@ -512,6 +578,7 @@ float sendCommand(char command)
 		case 'r':
 		case 'R':
 			value = getParams(&commandPacket);
+			if (value < 0) return value;
 			commandPacket.command = COMMAND_TURN_RIGHT;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
@@ -557,9 +624,10 @@ float sendCommand(char command)
 			READY_FLAG = false;
 			//getLidarData(&currentHeading, &nextHeading, &gridSteps);
 			printf("Switching to AUTONOMOUS mode...\n");
+			printf("To stop any time, input 's'\n");
 			commandPacket.command = COMMAND_AUTO_MODE;
 			sendPacket(&commandPacket);
-			sleep(2);
+			sleep(2);  // Wait a little while..
 			break;
 
 		case 'p':
@@ -570,6 +638,11 @@ float sendCommand(char command)
 		case 'o':
 		case 'O':
 			popFromStack();
+			break;
+			
+		case 'i':
+		case 'I':
+			pushToStack();
 			break;
 
 		case 'q':
@@ -599,6 +672,35 @@ void invertCommand(commandTuple *tup) {
 // stack
 void pushCmdToStack(commandTuple *tup) {
 	backStack.push_back(*tup);
+}
+
+// Call this to push in a custom command into the stack
+void pushToStack() {
+	commandTuple tup;
+	char ch;
+	float value;
+	
+	printf("Give a direction (f,b,l,r): ");
+	scanf("%c", &ch);
+	// Purge extraneous characters from input stream
+	flushInput();
+	
+	printf("Give a value (distance for forward/backward, turn degree for left/right): ");
+	scanf("%f", &value);
+	flushInput();
+	
+	// Build the command tuple
+	if (ch == 'l' || ch == 'L' || ch == 'r' || ch == 'R') {
+		get<0>(tup) = TURN_COMMAND;
+	}
+	else if (ch == 'f' || ch == 'F' || ch == 'b' || ch == 'B') {
+		get<0>(tup) = MOVE_COMMAND;
+	}
+	get<1>(tup) = ch;
+	get<2>(tup) = value;
+	
+	// Push the command to stack
+	pushCmdToStack(&tup);
 }
 
 // Call this to pop the most top command in the back track command stack
@@ -747,8 +849,8 @@ void setEndPoint(TPacket *commandPacket) {
  * Thus, we either return 1 or 2 movement commands. We wrap them in the
  * defined rawDataCommandPair
  */
-rawDataCommandPair processRawData(float currentHeading, float nextHeading, 
-	int gridSteps) {
+rawDataCommandPair processRawData(float currentHeading, 
+	float nextHeading, int gridSteps) {
 	// Raw data to command pair
 	rawDataCommandPair cmdPair;
 		
