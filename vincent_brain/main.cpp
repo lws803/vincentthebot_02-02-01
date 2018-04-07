@@ -44,6 +44,11 @@ typedef pair< pair<string, float> , pair<string, float> > rawDataCommandPair;
 // arg 2: Direction
 // arg 3: Angle/Distance
 typedef tuple<int, string, float> commandTuple;
+// Checkpoint markers
+// arg 1: Checkpoint index position
+// arg 2: y - coordinate
+// arg 3: x - coordinate
+typedef tuple<int index, float y, float x> checkpointTuple;
 
 /*
  * Global Variables
@@ -62,7 +67,8 @@ float nextHeading = 0;
 int gridSteps = 0;
 // Backtracking variables
 deque<commandTuple> backStack;
-// Output file for realtime reading
+vector<checkpointTuple> checkpointList;
+// Output file for real time reading
 //ofstream outputFile;
 
 /*
@@ -120,26 +126,18 @@ int main()
 	// Autonomous packet
 	TPacket autoPacket;
 	autoPacket.packetType = PACKET_TYPE_AUTO;
-	// Falied autonomous command counter
+	
+	// Failed autonomous command counter
 	int autoFailedCount = 0;
+	
+	// Checkpoints counter
+	int checkpointCount = 0;
 	
 	// Create a new screen output file
 	//outputFile.open("output.txt");
 
 	while(!exitFlag)
 	{	
-		/*
-		// Wait for Arduino to send the ready status to indicate ready
-		// to receive the next command
-		bool rdyMsg = false;
-		while (READY_FLAG == false) {
-			if (!rdyMsg && isMoving) {
-				printf("Vincent not ready, standby..\n");
-				rdyMsg = true;
-			}
-		}
-		*/
-
 		/* 
 		 * TWO different modes of movement
 		 * AUTONOMOUS
@@ -155,8 +153,8 @@ int main()
 		 * 	back a "ready" packet back.
 		 */
 		if (AUTONOMOUS_FLAG) {
-			// Check if the backtracking command stack is empty
-			// If it is, stop autonomous mode
+			// If command stack is empty, stop autonomous mode
+			// If the max retries for failed command is reach, stop autonomous mode
 			if (backStack.empty() || autoFailedCount == MAX_AUTO_FAIL) {
 				AUTONOMOUS_FLAG = false;
 				continue;
@@ -178,14 +176,23 @@ int main()
 			}
 		}
 		else {
+			 
+ 			/*
+			TODO:	Retrieve and store checkpoint coordinates
+					Should we tie the x-coord and y-coord of each command in the stack to that command?
+					
+			getLidarCoordinates(&y-coord, &x-coord);
+			checkpointList.push_back(make_tuple(checkpointCount++, y-coord, x-coord));
+			*/
+			
+			
+			
 			// Retrieve raw data from LIDAR
-			//getLidarData(&currentHeading, &nextHeading, &gridSteps);
+			// getLidarData(&currentHeading, &nextHeading, &gridSteps);
 			// Process raw data from LIDAR
 			rawDataCommandPair cmdPair = 
 				processRawData(currentHeading, nextHeading, gridSteps);
 			commandTuple inputCmd;
-			
-			printf("HEADING: %f\n", currentHeading);
 			
 			// If the turn angle is zero, we know we only needs to move
 			// forward/backward
@@ -193,6 +200,7 @@ int main()
 				
 				// Place the input request in loop for undo ability
 				do {
+					printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
 					printCommandList();
 					// Get the forward/backward input
 					inputCmd = executeUserCommand();
@@ -210,6 +218,7 @@ int main()
 			else {
 				// Place the input request in loop for undo ability
 				do {
+					printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
 					printCommandList();
 					// Get the forward/backward input
 					inputCmd = executeUserCommand();
@@ -224,6 +233,7 @@ int main()
 				
 				// Place the input request in loop for undo ability
 				do {
+					printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
 					printCommandList();
 					// Get the forward/backward input
 					inputCmd = executeUserCommand();
