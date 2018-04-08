@@ -51,6 +51,7 @@ typedef tuple<int, string, float> commandTuple;
 // arg 3: x - coordinate
 typedef tuple<int , float , float > checkpointTuple;
 
+
 /*
  * Global Variables
  */
