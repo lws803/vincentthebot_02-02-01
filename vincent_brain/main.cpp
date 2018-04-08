@@ -4,6 +4,7 @@
 #include <utility>
 #include <tuple>
 #include <deque>
+#include <vector>
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
@@ -19,9 +20,9 @@ using namespace std;
 #define BAUD_RATE					B9600
 
 // Defined constants to indicate directions, distance and speed
-#define DEFAULT_SPEED				100 // Default move/turn speed
-#define DEFAULT_LEFT_TURN_SPEED		100 // Default left turn speed
-#define DEFAULT_RIGHT_TURN_SPEED	100 // Default right turn speed
+#define DEFAULT_SPEED				200 // Default move/turn speed
+#define DEFAULT_LEFT_TURN_SPEED			205 // Default left turn speed
+#define DEFAULT_RIGHT_TURN_SPEED		205 // Default right turn speed
 #define GRID_UNIT_DISTANCE			20 // Assume grid unit distance to be wheel circumference
 // Defined constants for movement command type
 #define MOVE_COMMAND 				0 // For forward/backward
@@ -44,6 +45,11 @@ typedef pair< pair<string, float> , pair<string, float> > rawDataCommandPair;
 // arg 2: Direction
 // arg 3: Angle/Distance
 typedef tuple<int, string, float> commandTuple;
+// Checkpoint markers
+// arg 1: Checkpoint index position
+// arg 2: y - coordinate
+// arg 3: x - coordinate
+typedef tuple<int , float , float > checkpointTuple;
 
 /*
  * Global Variables
@@ -54,6 +60,8 @@ sem_t _xmitSema;
 volatile bool READY_FLAG = true;
 // General movement flags
 volatile bool isMoving = false;
+// Printing ready flag
+volatile bool canPrint = true;
 // Keep track of autonomous mode routine
 volatile bool AUTONOMOUS_FLAG = false;
 volatile bool AUTO_RECEIVE_OK = false;
@@ -62,7 +70,8 @@ float nextHeading = 0;
 int gridSteps = 0;
 // Backtracking variables
 deque<commandTuple> backStack;
-// Output file for realtime reading
+vector<checkpointTuple> checkpointList;
+// Output file for real time reading
 //ofstream outputFile;
 
 /*
@@ -95,6 +104,24 @@ void setEndPoint(TPacket *commandPacket);
 rawDataCommandPair processRawData(float currentHeading, 
 	float nextHeading, int gridSteps);
 
+void printCmd(commandTuple &tup) {
+	printf("\n\nDirection: ");
+	if (get<1>(tup) == "f") {
+		printf("Forward\n");
+	}
+	else if (get<1>(tup) == "b") {
+		printf("Backward\n");
+	}
+	else if (get<1>(tup) == "l") {
+		printf("Left\n");
+	}
+	else {
+		printf("Right\n");
+	}
+
+	printf("Value: %0.2f\n\n", get<2>(tup));
+}
+
 /*
  * Main program
  */
@@ -120,26 +147,21 @@ int main()
 	// Autonomous packet
 	TPacket autoPacket;
 	autoPacket.packetType = PACKET_TYPE_AUTO;
-	// Falied autonomous command counter
+	
+	// Failed autonomous command counter
 	int autoFailedCount = 0;
+	
+	// Checkpoints counter
+	int checkpointCount = 0;
+	
+	// Temporary autonomous command that is not sent
+	commandTuple errorCommand;
 	
 	// Create a new screen output file
 	//outputFile.open("output.txt");
 
 	while(!exitFlag)
 	{	
-		/*
-		// Wait for Arduino to send the ready status to indicate ready
-		// to receive the next command
-		bool rdyMsg = false;
-		while (READY_FLAG == false) {
-			if (!rdyMsg && isMoving) {
-				printf("Vincent not ready, standby..\n");
-				rdyMsg = true;
-			}
-		}
-		*/
-
 		/* 
 		 * TWO different modes of movement
 		 * AUTONOMOUS
@@ -155,44 +177,69 @@ int main()
 		 * 	back a "ready" packet back.
 		 */
 		if (AUTONOMOUS_FLAG) {
-			// Check if the backtracking command stack is empty
-			// If it is, stop autonomous mode
+			// If command stack is empty, stop autonomous mode
+			// If the max retries for failed command is reach, stop autonomous mode
 			if (backStack.empty() || autoFailedCount == MAX_AUTO_FAIL) {
 				AUTONOMOUS_FLAG = false;
+				if (autoFailedCount == MAX_AUTO_FAIL)
+					backStack.push_back(errorCommand);
+				
 				continue;
 			}
 			
 			// Continuously process autonomous commands
 			// Inform Arduino incoming autonomous packet
-			sendPacket(&autoPacket);
-			if (AUTO_RECEIVE_OK) {
+			if (AUTO_RECEIVE_OK && READY_FLAG && !isMoving) {
+				sendPacket(&autoPacket);
+				printf("Processing next command\n");
+				printCmd(backStack.back());
 				// Process the next command
-				backStack.pop_back();
 				processCommand(backStack.back());
+				errorCommand = backStack.back();
+				backStack.pop_back();
+				printCmdStack();
 				autoFailedCount = 0;
 			}
-			else {
+			else if (AUTO_RECEIVE_OK && (!READY_FLAG || isMoving)) {
+				continue;
+			}
+			else if (!AUTO_RECEIVE_OK) {
+				sendPacket(&autoPacket);
 				// Re-process the current failed command
-				processCommand(backStack.back());
+				processCommand(errorCommand);
 				autoFailedCount++;
+				printf("Retrying for %d times\n", autoFailedCount);
 			}
 		}
 		else {
+			 
+ 			/*
+			TODO:	Retrieve and store checkpoint coordinates
+					Should we tie the x-coord and y-coord of each command in the stack to that command?
+					
+			getLidarCoordinates(&y-coord, &x-coord);
+			checkpointList.push_back(make_tuple(checkpointCount++, y-coord, x-coord));
+			*/
+			
+			
+			
 			// Retrieve raw data from LIDAR
-			//getLidarData(&currentHeading, &nextHeading, &gridSteps);
+			// getLidarData(&currentHeading, &nextHeading, &gridSteps);
 			// Process raw data from LIDAR
 			rawDataCommandPair cmdPair = 
 				processRawData(currentHeading, nextHeading, gridSteps);
 			commandTuple inputCmd;
 			
-			printf("HEADING: %f\n", currentHeading);
-			
 			// If the turn angle is zero, we know we only needs to move
 			// forward/backward
 			if (get<1>(get<0>(cmdPair)) == 0) {
 				
+				while (!canPrint) {
+				}
+	
 				// Place the input request in loop for undo ability
 				do {
+					printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
 					printCommandList();
 					// Get the forward/backward input
 					inputCmd = executeUserCommand();
@@ -210,6 +257,7 @@ int main()
 			else {
 				// Place the input request in loop for undo ability
 				do {
+					printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
 					printCommandList();
 					// Get the forward/backward input
 					inputCmd = executeUserCommand();
@@ -224,6 +272,7 @@ int main()
 				
 				// Place the input request in loop for undo ability
 				do {
+					printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
 					printCommandList();
 					// Get the forward/backward input
 					inputCmd = executeUserCommand();
@@ -316,6 +365,7 @@ void handleResponse(TPacket *packet)
 		case RESP_READY:
 			printf("Vincent ready for next command\n");
 			READY_FLAG = true;
+			canPrint = true;
 			break;
 			
 		case RESP_HEADING:
@@ -555,6 +605,7 @@ float sendCommand(char command) {
 			commandPacket.command = COMMAND_FORWARD;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
+			canPrint = false;
 			break;
 
 		case 'b':
@@ -564,6 +615,7 @@ float sendCommand(char command) {
 			commandPacket.command = COMMAND_REVERSE;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
+			canPrint = false;
 			break;
 
 		case 'l':
@@ -573,6 +625,7 @@ float sendCommand(char command) {
 			commandPacket.command = COMMAND_TURN_LEFT;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
+			canPrint = false;
 			break;
 
 		case 'r':
@@ -582,6 +635,7 @@ float sendCommand(char command) {
 			commandPacket.command = COMMAND_TURN_RIGHT;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
+			canPrint = false;
 			break;
 
 		case 's':
@@ -589,11 +643,13 @@ float sendCommand(char command) {
 			commandPacket.command = COMMAND_STOP;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
+			canPrint = false;
 			break;
 
 		case 'e':
 		case 'E':
 			setEndPoint(&commandPacket);
+			canPrint = false;
 			break;
 
 		case 'c':
@@ -602,6 +658,7 @@ float sendCommand(char command) {
 			commandPacket.params[0] = 0;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
+			canPrint = false;
 			break;
 
 		case 'g':
@@ -609,6 +666,7 @@ float sendCommand(char command) {
 			commandPacket.command = COMMAND_GET_STATS;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
+			canPrint = false;
 			break;
 			
 		case 'h':
@@ -616,6 +674,7 @@ float sendCommand(char command) {
 			commandPacket.command = COMMAND_GET_HEADING;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
+			canPrint = false;
 			break;
 		
 		case 'a':
@@ -647,7 +706,12 @@ float sendCommand(char command) {
 
 		case 'q':
 		case 'Q':
-			exitFlag=1;
+			char quit;
+			printf("Once closed, ALL STACKS will be destroyed!\n");
+			printf("REALLY REALLY REALLY want to exit? 'q' to quit\n");
+			scanf("%c", &quit);
+			if (quit == 'q') 
+				exitFlag=1;
 			break;
 
 		default:
@@ -798,6 +862,7 @@ void processCommand(commandTuple cmdTup) {
 	sendPacket(&commandPacket);
 	
 	READY_FLAG = false;
+	isMoving = true;
 }
 
 void setEndPoint(TPacket *commandPacket) {
