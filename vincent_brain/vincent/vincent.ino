@@ -61,6 +61,8 @@ volatile TDirection dir = STOP;
 #define VINCENT_LENGTH 17.5
 #define VINCENT_BREADTH 11
 
+// Magnetometer
+#define DEG_PER_RAD (180.0/3.14159265358979)
 #define MAG_address 0x0E
 
 // Vincent's diagonal. We compute and store this once
@@ -108,8 +110,10 @@ unsigned long targetTicks;
 // Variables to keep track of current speed
 float currentSpeed;
 
-// Variable to store heading
+// Variable to store bearings
 float heading;
+float curBearing;
+float destBearing;
 
 // Variables to track autonomous states
 volatile bool AUTONOMOUS_FLAG = false  ;
@@ -187,6 +191,8 @@ void initializeState();
 
 //MAG3110
 void MAG(int*, int*, int*);
+void getHeading();
+void getBearing();
 
 // Debugging
 void lightRed();
@@ -217,8 +223,15 @@ void setup() {
 
 	vincentCirc = PI * vincentDiagonal;
 	
+	//Initialize I2C communication
+	Wire.begin();
+
+	//Start I2C transmission from the MAG3110
 	Wire.beginTransmission(MAG_address);
+
+	//Select control register-1
 	Wire.write((byte)0x10);
+	//Set active mode enabled
 	Wire.write((byte)0x01);
 	Wire.endTransmission();
 }
@@ -1036,30 +1049,76 @@ void stop()
  * 
  */
 
-void MAG(int *x, int *y, int *z) {
+/*void MAG(int *xR, int *yR, int *zR) {
+	unsigned int data[6];
+
 	//Tell the MAg3110 where to begin reading data
 	Wire.beginTransmission(MAG_address);
-	Wire.write((byte)0x01); //select register 1
+	Wire.write((byte)0x01); //Select register 1
 	Wire.endTransmission();
 
 	//Read data from each axis, 2 registers per axis
 	Wire.requestFrom(MAG_address, 6);
 	if (Wire.available() == 6){
-		*x = Wire.read() << 8; //X msb
-		*x |= Wire.read();     //X lsb
-		*y = Wire.read() << 8; //Y msb
-		*y |= Wire.read();     //Y lsb
-		*z = Wire.read() << 8; //Z msb
-        *z |= Wire.read();     //Z lsb
-	} else {   //return 0 value when data is unavailable or component is unplugged or malfuntioning
-		*x=0; *y=0; *z=0;
+		data[0] = Wire.read();
+		data[1] = Wire.read();
+		data[2] = Wire.read();
+		data[3] = Wire.read();
+		data[4] = Wire.read();
+		data[5] = Wire.read();
+
+		*xR = ((data[1] * 256) + data[0]);
+		*yR = ((data[3] * 256) + data[2]);
+		*zR = ((data[5] * 256) + data[4]);
+	} else {   //return 0 value when data is unavailable or component is unplugged or malfunctioning
+		*xR = 0; *yR = 0; *zR = 0;
 	}
+}*/
+
+void MAG(int* x, int* y, int* z) {
+
+	// Start readout at X MSB address
+	Wire.beginTransmission(MAG_address);
+	Wire.write((byte)0x01);
+	Wire.endTransmission();
+
+	delayMicroseconds(2);
+
+	// Read out data using multiple byte read mode
+	Wire.requestFrom(MAG_address, 6);
+ 	while( Wire.available() != 6 ) {}
+
+ 	// Combine registers
+	uint16_t values[3];
+	for(uint8_t idx = 0; idx <= 2; idx++)
+	{
+		values[idx]  = Wire.read() << 8;	// MSB
+		values[idx] |= Wire.read();			// LSB
+	}
+
+	// Put data into referenced variables
+	*x = (int) values[0];
+	*y = (int) values[1];
+	*z = (int) values[2];
+
 }
 
-void getHeading() {
+/*void getHeading() {
 	int MAG_x, MAG_y, MAG_z;
 	MAG(&MAG_x, &MAG_y, &MAG_z);
 	heading = atan2((float)MAG_y,(float)MAG_x);
+}*/
+
+void getHeading() {
+	int x, y, z;
+	MAG(&x, &y, &z);
+	heading = atan2(-y, x) * DEG_PER_RAD;
+}
+
+void getBearing() {
+	int x, y, z;
+	MAG(&x, &y, &z);
+	curBearing = atan2(-y, x) * DEG_PER_RAD;
 }
 
 // Clears all our counters
