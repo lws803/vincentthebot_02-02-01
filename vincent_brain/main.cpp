@@ -21,8 +21,8 @@ using namespace std;
 
 // Defined constants to indicate directions, distance and speed
 #define DEFAULT_SPEED				200 // Default move/turn speed
-#define DEFAULT_LEFT_TURN_SPEED			205 // Default left turn speed
-#define DEFAULT_RIGHT_TURN_SPEED		205 // Default right turn speed
+#define DEFAULT_LEFT_TURN_SPEED		205 // Default left turn speed
+#define DEFAULT_RIGHT_TURN_SPEED	205 // Default right turn speed
 #define GRID_UNIT_DISTANCE			20 // Assume grid unit distance to be wheel circumference
 // Defined constants for movement command type
 #define MOVE_COMMAND 				0 // For forward/backward
@@ -49,7 +49,7 @@ typedef tuple<int, string, float> commandTuple;
 // arg 1: Checkpoint index position
 // arg 2: y - coordinate
 // arg 3: x - coordinate
-typedef tuple<int , float , float > checkpointTuple;
+typedef tuple<int, float, float> checkpointTuple;
 
 
 /*
@@ -105,6 +105,7 @@ void setEndPoint(TPacket *commandPacket);
 rawDataCommandPair processRawData(float currentHeading, 
 	float nextHeading, int gridSteps);
 
+// Debugging function
 void printCmd(commandTuple &tup) {
 	printf("\n\nDirection: ");
 	if (get<1>(tup) == "f") {
@@ -189,20 +190,14 @@ int main()
 			}
 			
 			// Continuously process autonomous commands
-			// Inform Arduino incoming autonomous packet
 			if (AUTO_RECEIVE_OK && READY_FLAG && !isMoving) {
+				// Inform Arduino incoming autonomous packet
 				sendPacket(&autoPacket);
-				printf("Processing next command\n");
-				printCmd(backStack.back());
 				// Process the next command
 				processCommand(backStack.back());
 				errorCommand = backStack.back();
 				backStack.pop_back();
-				printCmdStack();
 				autoFailedCount = 0;
-			}
-			else if (AUTO_RECEIVE_OK && (!READY_FLAG || isMoving)) {
-				continue;
 			}
 			else if (!AUTO_RECEIVE_OK) {
 				sendPacket(&autoPacket);
@@ -210,6 +205,9 @@ int main()
 				processCommand(errorCommand);
 				autoFailedCount++;
 				printf("Retrying for %d times\n", autoFailedCount);
+			}
+			else if (AUTO_RECEIVE_OK && (!READY_FLAG || isMoving)) {
+				continue;
 			}
 		}
 		else {
@@ -231,7 +229,7 @@ int main()
 				processRawData(currentHeading, nextHeading, gridSteps);
 			commandTuple inputCmd;
 			
-			// If the turn angle is zero, we know we only needs to move
+			// If the turn angle is zero, only needs to move
 			// forward/backward
 			if (get<1>(get<0>(cmdPair)) == 0) {
 				
@@ -542,6 +540,7 @@ commandTuple executeUserCommand() {
 	
 	// Undo option in the case where user wants to change command
 	if (value < 0) {
+		printf("Command undo..\n");
 		get<0>(cmdTup) = UNDO_COMMAND;
 		return cmdTup;
 	}
@@ -711,7 +710,7 @@ float sendCommand(char command) {
 			printf("Once closed, ALL STACKS will be destroyed!\n");
 			printf("REALLY REALLY REALLY want to exit? 'q' to quit\n");
 			scanf("%c", &quit);
-			if (quit == 'q') 
+			if (quit == 'q' || quit == 'Q') 
 				exitFlag=1;
 			break;
 
@@ -751,8 +750,15 @@ void pushToStack() {
 	flushInput();
 	
 	printf("Give a value (distance for forward/backward, turn degree for left/right): ");
+	printf("TO UNDO: Input negative for any of the values.\n");
 	scanf("%f", &value);
 	flushInput();
+	
+	// Undo option
+	if (value < 0) {
+		printf("Undo command..\n");
+		return;
+	}
 	
 	// Build the command tuple
 	if (ch == 'l' || ch == 'L' || ch == 'r' || ch == 'R') {
@@ -770,9 +776,15 @@ void pushToStack() {
 
 // Call this to pop the most top command in the back track command stack
 void popFromStack() {
-	printf("CURRENT STACK\n");
+	char ch;
+	printf("POP the top command from stack? y/n\n");
+	scanf("%c", ch);
+	if (ch != 'y' && ch != 'Y') 
+		return;
+
+	printf("***URRENT STACK***\n");
 	printCmdStack();
-	printf("Now we pop the most recent command..\n");
+	printf("\nNow we pop the most recent command..\n");
 	backStack.pop_back();
 	printCmdStack();
 }
@@ -866,6 +878,9 @@ void processCommand(commandTuple cmdTup) {
 	isMoving = true;
 }
 
+
+// This function turns Vincent 180 degree to the back to get ready for
+// autonomous mode
 void setEndPoint(TPacket *commandPacket) {
 	// Ensure Vincent fully comes to a stop
 	commandPacket->packetType = PACKET_TYPE_COMMAND;
@@ -885,13 +900,6 @@ void setEndPoint(TPacket *commandPacket) {
 	sendPacket(&endPacket);
 	isMoving = true;
 	READY_FLAG = false;
-	
-	// Insert a dummy command into the stack
-	commandTuple cmdTup;
-	get<0>(cmdTup) = MOVE_COMMAND;
-	get<1>(cmdTup).push_back('f');
-	get<2>(cmdTup) = 0;
-	pushCmdToStack(&cmdTup);
 }
 
 /*
