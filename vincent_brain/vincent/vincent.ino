@@ -54,9 +54,6 @@ volatile TDirection dir = STOP;
 #define NEED_ADJUST_LEFT 0 
 #define NEED_ADJUST_RIGHT 1
 
-// PI, for calculating turn circumference 
-#define PI 3.1415923
-
 // Vincent's length and breadth in cm
 #define VINCENT_LENGTH 17.5
 #define VINCENT_BREADTH 11
@@ -190,9 +187,13 @@ void clearOneCounter(int which);
 void initializeState();
 
 //MAG3110
+void beginMAG();
 void MAG(int*, int*, int*);
 void getHeading();
 void getBearing();
+void leftMAG();
+void rightMAG();
+bool turn = false;;
 
 // Debugging
 void lightRed();
@@ -291,6 +292,31 @@ void loop() {
 		}
 	}
 
+  // Turning with magnetometer measurement
+  if (turn) {
+    if (dir == LEFT) {
+      while (curBearing > destBearing) {
+        getBearing();
+      }
+      curBearing = destBearing = 0;
+      turn = false;
+      stop();
+    }
+    else if (dir == RIGHT) {
+      while (curBearing < destBearing) {
+        getBearing();
+      }
+      curBearing = destBearing = 0;
+      turn = false;
+      stop();
+    }
+    else if (dir == STOP) {
+      curBearing = destBearing = 0;
+      turn = false;
+      stop();
+    }
+  }
+  
 	// Retrieve packets from RasPi and handle them
 	TPacket recvPacket; // This holds commands from the Pi
 	TResult result = readPacket(&recvPacket);
@@ -980,6 +1006,33 @@ void right(float ang, float speed)
 	motors.setSpeeds(speed, 0);
 }
 
+void leftMAG (float ang, float speed) {
+  // Set the direction of travel
+  dir = LEFT;
+  turn = true;
+
+  sendMoveOK();
+  getBearing();
+  destBearing = curBearing - ang;
+  if (destBearing < 0) destBearing += 360;
+
+  motors.setSpeeds(0, speed);
+}
+
+void rightMAG (float ang, float speed) {
+  // Set the direction of travel
+  dir = RIGHT;
+  turn = true;
+
+  sendMoveOK();
+  getBearing();
+  destBearing = curBearing + ang;
+  if (destBearing > 360) destBearing -= 360;
+
+  motors.setSpeeds(speed, 0);
+}
+
+
 // Adjust Vincent left given degree of adjust
 // TODO: Figure out the way to compute the degree of adjustment
 void adjustLeft(float increment) 
@@ -1110,15 +1163,23 @@ void MAG(int* x, int* y, int* z) {
 }*/
 
 void getHeading() {
-	int x, y, z;
-	MAG(&x, &y, &z);
-	heading = atan2(-y, x) * DEG_PER_RAD;
+  int x, y, z;
+  float temp = 0;
+  for (int i = 0; i < 5; i++) { 
+    MAG(&x, &y, &z);
+    temp += atan2(-y, x) * DEG_PER_RAD;
+  }
+  heading = temp/5;
 }
 
 void getBearing() {
-	int x, y, z;
-	MAG(&x, &y, &z);
-	curBearing = atan2(-y, x) * DEG_PER_RAD;
+  int x, y, z;
+  float temp = 0;
+  for (int i = 0; i < 5; i++) { 
+    MAG(&x, &y, &z);
+    temp += atan2(-y, x) * DEG_PER_RAD;
+  }
+  curBearing = temp/5;
 }
 
 // Clears all our counters
