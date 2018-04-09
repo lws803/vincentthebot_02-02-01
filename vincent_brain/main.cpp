@@ -74,6 +74,9 @@ deque<commandTuple> backStack;
 vector<checkpointTuple> checkpointList;
 // Output file for real time reading
 //ofstream outputFile;
+// Backup file to store command stack
+ofstream stackBackup;
+string stackBackupFilename = "stack_backup.txt";
 
 /*
  * Function prototypes
@@ -96,7 +99,8 @@ float getParams(TPacket *commandPacket);
 float sendCommand(char command);
 void invertCommand(commandTuple *tup);
 void pushCmdToStack(commandTuple *tup);
-void pushToStack();
+void pushNewCmdToStack();
+void pushCmdToFile(commandTuple *tup);
 void popFromStack();
 void printCmdStack();
 void processCommand(commandTuple cmdTup);
@@ -161,6 +165,9 @@ int main()
 	
 	// Create a new screen output file
 	//outputFile.open("output.txt");
+	
+	// Open a new text file to write the command stack backup
+	stackBackup.open(stackBackupFilename);
 
 	while(!exitFlag)
 	{	
@@ -219,6 +226,11 @@ int main()
 			getLidarCoordinates(&y-coord, &x-coord);
 			checkpointList.push_back(make_tuple(checkpointCount++, y-coord, x-coord));
 			*/
+			
+			/*
+			 * TODO:	Save the command stack in a separate text file as backup
+			 * 			in case te program crashes or exits
+			 */
 			
 			
 			
@@ -701,7 +713,7 @@ float sendCommand(char command) {
 			
 		case 'i':
 		case 'I':
-			pushToStack();
+			pushNewCmdToStack();
 			break;
 
 		case 'q':
@@ -739,7 +751,7 @@ void pushCmdToStack(commandTuple *tup) {
 }
 
 // Call this to push in a custom command into the stack
-void pushToStack() {
+void pushNewCmdToStack() {
 	commandTuple tup;
 	char ch;
 	float value;
@@ -774,11 +786,27 @@ void pushToStack() {
 	pushCmdToStack(&tup);
 }
 
+void pushCmdToFile(commandTuple *tup) {
+	float value;
+	
+	// Write the direction
+	if (get<1>(*tup) == "l" || get<1>(*tup) == "L")
+		stackBackup << "LEFT ";
+	else if (get<1>(*tup) == "r" || get<1>(*tup) == "R")
+		stackBackup << "RIGHT ";
+	else if (get<1>(*tup) == "f" || get<1>(*tup) == "F")
+		stackBackup << "FORWARD ";
+	else
+		stackBackup << "BACKWARD ";
+	
+	stackBackup << get<2>(*tup);
+}
+
 // Call this to pop the most top command in the back track command stack
 void popFromStack() {
 	char ch;
 	printf("POP the top command from stack? y/n\n");
-	scanf("%c", ch);
+	scanf("%c", &ch);
 	if (ch != 'y' && ch != 'Y') 
 		return;
 
