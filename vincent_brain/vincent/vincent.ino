@@ -2,9 +2,13 @@
 #include <math.h>
 #include <Wire.h>
 #include <string.h>
+#include <avr/io.h>
+#include <avr/interrupt.h>
 #include "packet.h"
 #include "constants.h"
 #include <A4990MotorShield.h>
+//#include "Motors.h"
+
 
 /*
  * TODO:
@@ -15,6 +19,11 @@
  * 
  */
 
+// Motor wires
+// YELLOW to RED
+// ORANGE to BLACK
+// GREEN to BLACK
+// BLUE to RED
 
 typedef enum
 {
@@ -24,6 +33,111 @@ typedef enum
 	LEFT=3,
 	RIGHT=4
 } TDirection;
+
+////////////////////////////////////////////////////////
+/*
+const unsigned char _MTR1DIR = 7;	// PORTD (PD7)
+const unsigned char _MTR2DIR = 8;	// PORTB (PB0)	
+const unsigned char _MTR1PWM = 9;	// PORTB (PB1)
+const unsigned char _MTR2PWM = 10;	// PORTB (PB2)
+
+volatile int currSpeed;
+
+void initMotors() {
+	// initialize pin states 
+	
+	// write to _MTR1PWM
+	PORTB &= 0b11111101;	// write low
+	DDRB |= 0b00000010;
+	PORTB &= 0b11111101;	// write low
+	
+	// write to _MTR2PWM
+	PORTB &= 0b11111011;	// write low
+	DDRB |= 0b00000100;
+	PORTB &= 0b11111011;	// write low
+	
+	// write to _MTR1DIR
+	PORTD &= 0b01111111;	// write low
+	DDRD |= 0b10000000;
+	PORTD &= 0b01111111;	// write low
+	
+	// write to _MTR2DIR
+	PORTB &= 0b11111110;	// write low
+	DDRB |= 0b00000001;
+	PORTB &= 0b11111110;	// write low
+	
+	// enable interrupts for timer1
+	TIMSK1 |= 0b110;
+	
+	#ifdef MOTOR_USE_20KHZ_PWM
+		// timer 1 configuration
+		// prescaler: clockI/O / 1
+		// outputs enabled
+		// phase-correct PWM
+		// top of 400
+		//
+		// PWM frequency calculation
+		// 16MHz / 1 (prescaler) / 2 (phase-correct) / 400 (top) = 20kHz
+		TCCR1A = 0b10100000;
+		TCCR1B = 0b00010001;
+		ICR1 = 400; 
+	#endif
+
+}
+
+ISR(TIMER1_COMPA_vect) {
+	OCR1A = currSpeed * 51/80;
+}
+
+ISR(TIMER1_COMPB_vect) {
+	OCR1B = currSpeed * 51/80;
+}
+
+void setM1Speed(int speed) {
+	init();
+	currSpeed = speed;
+	
+	if (speed < 0) 
+		
+		speed = -speed;
+	else if (speed > 400)
+		speed = 400;
+	
+	#ifdef	MOTOR_USE_20KHZ_PWM
+		OCR1A = speed;
+	#endif
+	
+	TCCR1A = 0b10000001;
+	PORTB &= 0b11111101;	// write low
+	PORTD &= 0b01111111;	// write low
+}
+
+void setM2Speed(int speed) {
+	init();
+	currSpeed = speed;
+	
+	if (speed < 0) 
+		speed = -speed;
+	else if (speed > 400)
+		speed = 400;
+	
+	
+	//#ifdef	MOTOR_USE_20KHZ_PWM
+		//OCR1B = speed;//
+	//#endif//
+	
+	TCCR1A = 0b10000001;
+	PORTB &= 0b11111110;	// write low
+	PORTB &= 0b11111011;	// write low
+}
+
+void setSpeeds(int m1Speed, int m2Speed) {
+	setM1Speed(m1Speed);
+	setM2Speed(m2Speed);
+}
+*/
+////////////////////////////////////////////////
+
 
 volatile TDirection dir = STOP;
 /*
@@ -63,6 +177,9 @@ volatile TDirection dir = STOP;
 
 #define MAG_address 0x0E
 
+#define MOTOR_CONST_LEFT 0 
+#define MOTOR_CONST_RIGHT 0
+
 // Vincent's diagonal. We compute and store this once
 // since it is expensive to compute and really doesn't change
 float vincentDiagonal = 0.0;
@@ -74,6 +191,9 @@ float vincentCirc = 0.0;
  *    Vincent's State Variables
  */
 
+// declare motor 1 and motor 2 object from motor library
+A4990MotorShield motors;
+ 
 // Store the ticks from Vincent's left and
 // right encoders.
 volatile unsigned long leftForwardTicks; 
@@ -117,9 +237,6 @@ volatile bool AUTONOMOUS_FLAG = false  ;
 // Store current Vincent mode (default as remote)
 bool isAuto = false;
 
-// declare motor 1 and motor 2 object from motor library
-A4990MotorShield motors;
-
 /* 
  *
  *  ALL function prototypes
@@ -149,8 +266,8 @@ void enablePullups();
 void leftISR();
 void rightISR();
 void setupEINT();
-ISR (INT0_vect);
-ISR (INT1_vect);
+//ISR (INT0_vect);
+//ISR (INT1_vect);
 
 // Set up serial communications
 void setupSerial();
@@ -217,10 +334,12 @@ void setup() {
 
 	vincentCirc = PI * vincentDiagonal;
 	
+	/*
 	Wire.beginTransmission(MAG_address);
 	Wire.write((byte)0x10);
 	Wire.write((byte)0x01);
 	Wire.endTransmission();
+	*/
 }
 
 /*
@@ -230,6 +349,7 @@ void setup() {
  */
 void loop() {
 
+	
 	// Check when Vincent can stop moving forward/backward after
 	// it is given a fixed distance to move forward/backward
 	if (deltaDist > 0) {
@@ -471,11 +591,11 @@ void sendReady() {
 }
 
 void sendHeading() {
-        TPacket headingPacket;
-        headingPacket.packetType = PACKET_TYPE_RESPONSE;
-        headingPacket.command = RESP_HEADING;
-		headingPacket.params[0] = heading;
-        sendResponse(&headingPacket);
+    TPacket headingPacket;
+    headingPacket.packetType = PACKET_TYPE_RESPONSE;
+    headingPacket.command = RESP_HEADING;
+	headingPacket.params[0] = heading;
+    sendResponse(&headingPacket);
 }
 
 void sendResponse(TPacket *packet) {
@@ -546,6 +666,7 @@ void handleCommand(TPacket *command)
 			sendOK();
 			getHeading();
 			sendHeading();
+			sendReady();
 			break;
 		default:
 			sendBadCommand();
@@ -753,8 +874,8 @@ void setupMotors()
 	/* Our motor set up is:  
 	 *    A1IN - Pin 5, PD5, OC0B
 	 *    A2IN - Pin 6, PD6, OC0A
-	 *    B1IN - Pin 10, PB2, OC1B
-	 *    B2In - pIN 11, PB3, OC2A
+	 *    B1IN - Pin 10, PB2, OC1B	// i think it is OC2B
+	 *    B2In - Pin 11, PB3, OC2A
 	 */
 
 }
@@ -838,10 +959,10 @@ void forward(float dist, float speed)
 	/*
 	analogWrite(LF, leftVal);
 	analogWrite(RF, rightVal);
-	analogWrite(LR,0);
-	analogWrite(RR, 0);*/
+	analogWrite(LR,0, 0);*/
 	
-	motors.setSpeeds(speed, 0.97*speed);
+	motors.setSpeeds(speed - MOTOR_CONST_LEFT, speed - MOTOR_CONST_RIGHT);
+	//motors.setSpeeds(speed - MOTOR_CONST_LEFT, speed - MOTOR_CONST_RIGHT);
 }
 
 // Reverse Vincent "dist" cm at speed "speed".
@@ -873,8 +994,8 @@ void reverse(float dist, float speed)
 	else deltaDist = 9999999;
 	newDist = reverseDist + deltaDist;
 
-	
-	motors.setSpeeds(-speed, -0.97*speed);
+	//setSpeeds(-speed + MOTOR_CONST_LEFT, -speed + MOTOR_CONST_RIGHT);
+	motors.setSpeeds(-speed + MOTOR_CONST_LEFT, -speed + MOTOR_CONST_RIGHT);
 	
 	
 	// LF = Left forward pin, LR = Left reverse pin
@@ -933,7 +1054,9 @@ void left(float ang, float speed)
 	//analogWrite(RR, 0);
 	
 	// left motor does nothing, right motor moves
-	motors.setSpeeds(0, speed);
+	//setSpeeds(0, speed);
+	motors.setSpeeds(-speed, speed);  // spot turn
+	//motors.setSpeeds(0, speed);
 }
 
 // Turn Vincent right "ang" degrees at speed "speed".
@@ -963,8 +1086,10 @@ void right(float ang, float speed)
 	//analogWrite(LF, leftVal);
 	//analogWrite(LR, 0);
 	//analogWrite(RF, 0);
-
-	motors.setSpeeds(speed, 0);
+	
+	//setSpeeds(speed, 0);
+	//motors.setSpeeds(speed, 0); spot turn
+  motors.setSpeeds(speed, -speed);
 }
 
 // Adjust Vincent left given degree of adjust
@@ -981,6 +1106,7 @@ void adjustLeft(float increment)
 	//int leftVal = pwmVal(currentSpeed);
 	//int rightVal = pwmVal(currentSpeed + increment);
 	
+	//setSpeeds(currentSpeed, currentSpeed + increment);
 	motors.setSpeeds(currentSpeed, currentSpeed + increment);
 	
 	//analogWrite(LF, leftVal);
@@ -1003,6 +1129,7 @@ void adjustRight(float increment)
 	//int rightVal = pwmVal(currentSpeed);
 	//int leftVal = pwmVal(currentSpeed + increment);
 
+	//setSpeeds(currentSpeed + increment, currentSpeed);
 	motors.setSpeeds(currentSpeed + increment, currentSpeed);
 	
 	// Write the values to motors
@@ -1024,12 +1151,19 @@ int getAdjustReadings()
 void stop()
 {
 	dir = STOP;
-
+	
+	//setSpeeds(0, 0);
 	motors.setSpeeds(0,0);
 
 	sendStopOK();
 	sendReady();
 }
+
+/* End of vincent motor code
+ *
+ */
+
+
 
 /*
  * Vincent's setup and run codes
