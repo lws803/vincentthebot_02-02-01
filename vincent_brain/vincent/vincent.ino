@@ -168,13 +168,12 @@ volatile TDirection dir = STOP;
 #define NEED_ADJUST_LEFT 0 
 #define NEED_ADJUST_RIGHT 1
 
-// PI, for calculating turn circumference 
-#define PI 3.1415923
-
 // Vincent's length and breadth in cm
 #define VINCENT_LENGTH 17.5
 #define VINCENT_BREADTH 11
 
+// Magnetometer
+#define DEG_PER_RAD (180.0/3.14159265358979)
 #define MAG_address 0x0E
 
 #define MOTOR_CONST_LEFT 0 
@@ -228,8 +227,10 @@ unsigned long targetTicks;
 // Variables to keep track of current speed
 float currentSpeed;
 
-// Variable to store heading
+// Variable to store bearings
 float heading;
+float curBearing;
+float destBearing;
 
 // Variables to track autonomous states
 volatile bool AUTONOMOUS_FLAG = false  ;
@@ -303,7 +304,13 @@ void clearOneCounter(int which);
 void initializeState();
 
 //MAG3110
+void beginMAG();
 void MAG(int*, int*, int*);
+void getHeading();
+void getBearing();
+void leftMAG();
+void rightMAG();
+bool turn = false;;
 
 // Debugging
 void lightRed();
@@ -333,13 +340,26 @@ void setup() {
 			+ (VINCENT_BREADTH * VINCENT_BREADTH));
 
 	vincentCirc = PI * vincentDiagonal;
+
 	
-	/*
+
+
+/*	
+	//Initialize I2C communication
+	Wire.begin();
+
+	//Start I2C transmission from the MAG3110
+
 	Wire.beginTransmission(MAG_address);
+
+	//Select control register-1
 	Wire.write((byte)0x10);
+	//Set active mode enabled
 	Wire.write((byte)0x01);
 	Wire.endTransmission();
+
 	*/
+
 }
 
 /*
@@ -398,6 +418,31 @@ void loop() {
 		}
 	}
 
+  // Turning with magnetometer measurement
+  if (turn) {
+    if (dir == LEFT) {
+      while (curBearing > destBearing) {
+        getBearing();
+      }
+      curBearing = destBearing = 0;
+      turn = false;
+      stop();
+    }
+    else if (dir == RIGHT) {
+      while (curBearing < destBearing) {
+        getBearing();
+      }
+      curBearing = destBearing = 0;
+      turn = false;
+      stop();
+    }
+    else if (dir == STOP) {
+      curBearing = destBearing = 0;
+      turn = false;
+      stop();
+    }
+  }
+  
 	// Retrieve packets from RasPi and handle them
 	TPacket recvPacket; // This holds commands from the Pi
 	TResult result = readPacket(&recvPacket);
@@ -1092,6 +1137,33 @@ void right(float ang, float speed)
   motors.setSpeeds(speed, -speed);
 }
 
+void leftMAG (float ang, float speed) {
+  // Set the direction of travel
+  dir = LEFT;
+  turn = true;
+
+  sendMoveOK();
+  getBearing();
+  destBearing = curBearing - ang;
+  if (destBearing < 0) destBearing += 360;
+
+  motors.setSpeeds(0, speed);
+}
+
+void rightMAG (float ang, float speed) {
+  // Set the direction of travel
+  dir = RIGHT;
+  turn = true;
+
+  sendMoveOK();
+  getBearing();
+  destBearing = curBearing + ang;
+  if (destBearing > 360) destBearing -= 360;
+
+  motors.setSpeeds(speed, 0);
+}
+
+
 // Adjust Vincent left given degree of adjust
 // TODO: Figure out the way to compute the degree of adjustment
 void adjustLeft(float increment) 
@@ -1170,30 +1242,84 @@ void stop()
  * 
  */
 
-void MAG(int *x, int *y, int *z) {
+/*void MAG(int *xR, int *yR, int *zR) {
+	unsigned int data[6];
+
 	//Tell the MAg3110 where to begin reading data
 	Wire.beginTransmission(MAG_address);
-	Wire.write((byte)0x01); //select register 1
+	Wire.write((byte)0x01); //Select register 1
 	Wire.endTransmission();
 
 	//Read data from each axis, 2 registers per axis
 	Wire.requestFrom(MAG_address, 6);
 	if (Wire.available() == 6){
-		*x = Wire.read() << 8; //X msb
-		*x |= Wire.read();     //X lsb
-		*y = Wire.read() << 8; //Y msb
-		*y |= Wire.read();     //Y lsb
-		*z = Wire.read() << 8; //Z msb
-        *z |= Wire.read();     //Z lsb
-	} else {   //return 0 value when data is unavailable or component is unplugged or malfuntioning
-		*x=0; *y=0; *z=0;
+		data[0] = Wire.read();
+		data[1] = Wire.read();
+		data[2] = Wire.read();
+		data[3] = Wire.read();
+		data[4] = Wire.read();
+		data[5] = Wire.read();
+
+		*xR = ((data[1] * 256) + data[0]);
+		*yR = ((data[3] * 256) + data[2]);
+		*zR = ((data[5] * 256) + data[4]);
+	} else {   //return 0 value when data is unavailable or component is unplugged or malfunctioning
+		*xR = 0; *yR = 0; *zR = 0;
 	}
+}*/
+
+void MAG(int* x, int* y, int* z) {
+
+	// Start readout at X MSB address
+	Wire.beginTransmission(MAG_address);
+	Wire.write((byte)0x01);
+	Wire.endTransmission();
+
+	delayMicroseconds(2);
+
+	// Read out data using multiple byte read mode
+	Wire.requestFrom(MAG_address, 6);
+ 	while( Wire.available() != 6 ) {}
+
+ 	// Combine registers
+	uint16_t values[3];
+	for(uint8_t idx = 0; idx <= 2; idx++)
+	{
+		values[idx]  = Wire.read() << 8;	// MSB
+		values[idx] |= Wire.read();			// LSB
+	}
+
+	// Put data into referenced variables
+	*x = (int) values[0];
+	*y = (int) values[1];
+	*z = (int) values[2];
+
 }
 
-void getHeading() {
+/*void getHeading() {
 	int MAG_x, MAG_y, MAG_z;
 	MAG(&MAG_x, &MAG_y, &MAG_z);
 	heading = atan2((float)MAG_y,(float)MAG_x);
+}*/
+
+void getHeading() {
+  int x, y, z;
+  float temp = 0;
+  for (int i = 0; i < 5; i++) { 
+    MAG(&x, &y, &z);
+    temp += atan2(-y, x) * DEG_PER_RAD;
+  }
+  heading = temp/5 + 180;
+}
+
+void getBearing() {
+  int x, y, z;
+  float temp = 0;
+  for (int i = 0; i < 5; i++) { 
+    MAG(&x, &y, &z);
+    temp += atan2(-y, x) * DEG_PER_RAD;
+  }
+  curBearing = temp/5 + 180;
 }
 
 // Clears all our counters

@@ -55,7 +55,7 @@ private:
 	set<pair<int, int > > visited;
 
 	// Params to set
-	int probability = 10;
+	int probability = 0;
 	int mode = 1; 
 
 	// 0 means manhattan distance, 1 means cartesian distance
@@ -130,7 +130,7 @@ public:
 	                    neighbour = start;
 	                    neighbour->g_cost = cartesian_count(x+i, y+d, start->x, start->y);
 	                    neighbour->h_cost = cartesian_count(x+i, y+d, end->x, end->y);
-	                    //neighbour->parent = current;
+	                    neighbour->parent = current;
 	                }
 	                else {
 	                    neighbour = new coords_t;
@@ -280,7 +280,7 @@ public:
 		            steps_start = 2;
 		            curr_heading = temp_heading;
 		        }
-
+		        cout << maze[current_point->y][current_point->x] << endl;
 		        geometry_msgs::PoseStamped my_pose;
 		        my_pose.pose.position.x = current_point->x - width/2;
 		        my_pose.pose.position.y = current_point->y - height/2;
