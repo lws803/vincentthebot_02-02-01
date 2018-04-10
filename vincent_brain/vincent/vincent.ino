@@ -80,25 +80,17 @@ void initMotors() {
 		// 16MHz / 1 (prescaler) / 2 (phase-correct) / 400 (top) = 20kHz
 		TCCR1A = 0b10100000;
 		TCCR1B = 0b00010001;
+		TCNT0 = 0;
 		ICR1 = 400; 
 	#endif
-
 }
 
-ISR(TIMER1_COMPA_vect) {
-	OCR1A = currSpeed * 51/80;
-}
-
-ISR(TIMER1_COMPB_vect) {
-	OCR1B = currSpeed * 51/80;
-}
 
 void setM1Speed(int speed) {
 	init();
 	currSpeed = speed;
 	
 	if (speed < 0) 
-		
 		speed = -speed;
 	else if (speed > 400)
 		speed = 400;
@@ -107,9 +99,13 @@ void setM1Speed(int speed) {
 		OCR1A = speed;
 	#endif
 	
-	TCCR1A = 0b10000001;
-	PORTB &= 0b11111101;	// write low
-	PORTD &= 0b01111111;	// write low
+	TCCR1A |= 0b10000001;	// sets timer 1
+	PORTB |= 0b00000010;	// write high
+	PORTD |= 0b10000000;	// write high
+	TCCR1B |= 0b00000001;	// starts timer 1
+	
+	if (speed 
+	OCR1B = speed; 
 }
 
 void setM2Speed(int speed) {
@@ -126,9 +122,11 @@ void setM2Speed(int speed) {
 		//OCR1B = speed;//
 	//#endif//
 	
-	TCCR1A = 0b10000001;
-	PORTB &= 0b11111110;	// write low
-	PORTB &= 0b11111011;	// write low
+	TCCR1A = 0b10000001;	// sets timer 1
+	PORTB &= 0b00000001;	// write low
+	PORTB &= 0b00000100;	// write low
+	
+	OCR1A = speed;
 }
 
 void setSpeeds(int m1Speed, int m2Speed) {
@@ -177,7 +175,7 @@ volatile TDirection dir = STOP;
 #define MAG_address 0x0E
 
 #define MOTOR_CONST_LEFT 0 
-#define MOTOR_CONST_RIGHT 0
+#define MOTOR_CONST_RIGHT 3
 
 // Vincent's diagonal. We compute and store this once
 // since it is expensive to compute and really doesn't change
@@ -191,7 +189,9 @@ float vincentCirc = 0.0;
  */
 
 // declare motor 1 and motor 2 object from motor library
-A4990MotorShield motors;
+Motors motors;
+//A4990MotorShield motors;
+ 
  
 // Store the ticks from Vincent's left and
 // right encoders.
@@ -303,14 +303,19 @@ void clearCounters();
 void clearOneCounter(int which);
 void initializeState();
 
-//MAG3110
+// MAG3110
 void beginMAG();
 void MAG(int*, int*, int*);
 void getHeading();
-void getBearing();
+float getBearing();
 void leftMAG();
 void rightMAG();
 bool turn = false;;
+
+// IR Sensor
+bool hasLeftObstacle();
+bool hasRightObstacle();
+void setupIR();
 
 // Debugging
 void lightRed();
@@ -323,7 +328,7 @@ void lightRed();
 void setup() {
 
 	// Setup PD4 as output pin for red led lighting
-	DDRD |= 0b00010000;
+	// DDRD |= 0b00010000;
 
 	cli();
 	setupEINT();
@@ -334,6 +339,7 @@ void setup() {
 	enablePullups();
 	initializeState();
 	sei();
+	setupIR();
 
 	// Compute Vincent's diagonal and circumference
 	vincentDiagonal = sqrt((VINCENT_LENGTH * VINCENT_LENGTH) 
@@ -341,10 +347,7 @@ void setup() {
 
 	vincentCirc = PI * vincentDiagonal;
 
-	
 
-
-/*	
 	//Initialize I2C communication
 	Wire.begin();
 
@@ -357,8 +360,6 @@ void setup() {
 	//Set active mode enabled
 	Wire.write((byte)0x01);
 	Wire.endTransmission();
-
-	*/
 
 }
 
@@ -379,12 +380,26 @@ void loop() {
 				newDist = 0;
 				stop();
 			}
+			
+			// check right and left obstacles
+			if (hasLeftObstacle()) {
+				adjustRight(20);
+			} else if (hasRightObstacle()) {
+				adjustLeft(20);
+			}
 		}
 		else if (dir == BACKWARD) {
 			if (reverseDist > newDist) {
 				deltaDist = 0;
 				newDist = 0;
 				stop();
+			}
+			
+			// check right and left obstacles
+			if (hasLeftObstacle()) {
+				adjustRight(20);
+			} else if (hasRightObstacle()) {
+				adjustLeft(20);
 			}
 		}
 		else if (dir == STOP) {
@@ -393,7 +408,10 @@ void loop() {
 			stop();
 		}
 	}
-
+	
+	
+	
+	/*
 	// Check when Vincent can stop turning left/right after
 	// it is given a fixed angle to turn left/right
 	if (deltaTicks > 0) {
@@ -416,22 +434,22 @@ void loop() {
 			targetTicks = 0;
 			stop();
 		}
-	}
+	}*/
 
   // Turning with magnetometer measurement
   if (turn) {
     if (dir == LEFT) {
-      while (curBearing > destBearing) {
-        getBearing();
+      while (getBearing() > destBearing) {
       }
+	  
       curBearing = destBearing = 0;
       turn = false;
       stop();
     }
     else if (dir == RIGHT) {
-      while (curBearing < destBearing) {
-        getBearing();
+      while (getBearing() < destBearing) {
       }
+	  
       curBearing = destBearing = 0;
       turn = false;
       stop();
@@ -442,6 +460,9 @@ void loop() {
       stop();
     }
   }
+  
+  
+  
   
 	// Retrieve packets from RasPi and handle them
 	TPacket recvPacket; // This holds commands from the Pi
@@ -671,10 +692,12 @@ void handleCommand(TPacket *command)
 		case COMMAND_TURN_LEFT:
 			sendOK();
 			left((float) command->params[0], (float) command->params[1]);
+			//leftMAG((float) command->params[0], (float) command->params[1]);
 			break;
 		case COMMAND_TURN_RIGHT:
 			sendOK();
 			right((float) command->params[0], (float) command->params[1]);
+			//rightMAG((float) command->params[0], (float) command->params[1]);
 			break;
 		case COMMAND_ADJUST_LEFT:
 			sendOK();
@@ -919,9 +942,11 @@ void setupMotors()
 	/* Our motor set up is:  
 	 *    A1IN - Pin 5, PD5, OC0B
 	 *    A2IN - Pin 6, PD6, OC0A
-	 *    B1IN - Pin 10, PB2, OC1B	// i think it is OC2B
+	 *    B1IN - Pin 10, PB2, OC1B	
 	 *    B2In - Pin 11, PB3, OC2A
 	 */
+	 
+	 // 
 
 }
 
@@ -995,6 +1020,7 @@ void forward(float dist, float speed)
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
 	else deltaDist = 9999999;
+	
 	newDist = forwardDist + deltaDist;
 
 	// LF = Left forward pin, LR = Left reverse pin
@@ -1143,7 +1169,7 @@ void leftMAG (float ang, float speed) {
   turn = true;
 
   sendMoveOK();
-  getBearing();
+  curBearing = getBearing();
   destBearing = curBearing - ang;
   if (destBearing < 0) destBearing += 360;
 
@@ -1156,7 +1182,7 @@ void rightMAG (float ang, float speed) {
   turn = true;
 
   sendMoveOK();
-  getBearing();
+  curBearing = getBearing();
   destBearing = curBearing + ang;
   if (destBearing > 360) destBearing -= 360;
 
@@ -1312,14 +1338,14 @@ void getHeading() {
   heading = temp/5 + 180;
 }
 
-void getBearing() {
+float getBearing() {
   int x, y, z;
   float temp = 0;
   for (int i = 0; i < 5; i++) { 
     MAG(&x, &y, &z);
     temp += atan2(-y, x) * DEG_PER_RAD;
   }
-  curBearing = temp/5 + 180;
+  return temp/5 + 180;
 }
 
 // Clears all our counters
@@ -1350,6 +1376,25 @@ void initializeState()
 {
 	clearCounters();
 }
+
+void setupIR() {
+	// pin 12 for leftIR -> (PB4)
+	DDRB &= 0b11101111;	// set as input
+	
+	// pin 13 for rightIR -> (PB5)
+	DDRB &= 0b11011111;	// set as input
+}
+
+bool hasLeftObstacle() {
+	if (PINB & 0b00010000)	return false;
+	else	return true;
+}
+
+bool hasRightObstacle() {
+	if (PINB & 0b00100000)	return false;
+	else	return true;
+}
+
 
 // Light up red led for debugging
 void lightRed() 
