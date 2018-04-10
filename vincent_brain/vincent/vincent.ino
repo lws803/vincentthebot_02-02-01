@@ -189,8 +189,7 @@ float vincentCirc = 0.0;
  */
 
 // declare motor 1 and motor 2 object from motor library
-Motors motors;
-//A4990MotorShield motors;
+A4990MotorShield motors;
  
  
 // Store the ticks from Vincent's left and
@@ -347,7 +346,7 @@ void setup() {
 
 	vincentCirc = PI * vincentDiagonal;
 
-
+/*
 	//Initialize I2C communication
 	Wire.begin();
 
@@ -360,6 +359,7 @@ void setup() {
 	//Set active mode enabled
 	Wire.write((byte)0x01);
 	Wire.endTransmission();
+	*/
 
 }
 
@@ -382,11 +382,11 @@ void loop() {
 			}
 			
 			// check right and left obstacles
-			if (hasLeftObstacle()) {
+			/*if (hasLeftObstacle()) {
 				adjustRight(20);
 			} else if (hasRightObstacle()) {
 				adjustLeft(20);
-			}
+			}*/
 		}
 		else if (dir == BACKWARD) {
 			if (reverseDist > newDist) {
@@ -396,11 +396,11 @@ void loop() {
 			}
 			
 			// check right and left obstacles
-			if (hasLeftObstacle()) {
+			/*if (hasLeftObstacle()) {
 				adjustRight(20);
 			} else if (hasRightObstacle()) {
 				adjustLeft(20);
-			}
+			}*/
 		}
 		else if (dir == STOP) {
 			deltaDist = 0;
@@ -411,7 +411,7 @@ void loop() {
 	
 	
 	
-	/*
+	
 	// Check when Vincent can stop turning left/right after
 	// it is given a fixed angle to turn left/right
 	if (deltaTicks > 0) {
@@ -434,8 +434,9 @@ void loop() {
 			targetTicks = 0;
 			stop();
 		}
-	}*/
+	}
 
+	/*
   // Turning with magnetometer measurement
   if (turn) {
     if (dir == LEFT) {
@@ -459,7 +460,7 @@ void loop() {
       turn = false;
       stop();
     }
-  }
+  }*/
   
   
   
