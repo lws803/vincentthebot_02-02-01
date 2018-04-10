@@ -223,7 +223,7 @@ void setup() {
 			+ (VINCENT_BREADTH * VINCENT_BREADTH));
 
 	vincentCirc = PI * vincentDiagonal;
-	
+/*	
 	//Initialize I2C communication
 	Wire.begin();
 
@@ -235,6 +235,7 @@ void setup() {
 	//Set active mode enabled
 	Wire.write((byte)0x01);
 	Wire.endTransmission();
+*/
 }
 
 /*
