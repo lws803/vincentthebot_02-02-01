@@ -1169,7 +1169,7 @@ void getHeading() {
     MAG(&x, &y, &z);
     temp += atan2(-y, x) * DEG_PER_RAD;
   }
-  heading = temp/5;
+  heading = temp/5 + 180;
 }
 
 void getBearing() {
@@ -1179,7 +1179,7 @@ void getBearing() {
     MAG(&x, &y, &z);
     temp += atan2(-y, x) * DEG_PER_RAD;
   }
-  curBearing = temp/5;
+  curBearing = temp/5 + 180;
 }
 
 // Clears all our counters
