@@ -1294,39 +1294,44 @@ void stop()
 	}
 }*/
 
-void MAG(int* x, int* y, int* z) {
+void MAG(int* xR, int* yR, int* zR) {
+  int x, y, z;
+  static int xmax = -1024, xmin = 1024, ymax = -1024, ymin = 1024, zmax = -1024, zmin = 1024;
+  
+  Wire.beginTransmission(MAG_address);
+  Wire.write((byte)0x01);
+  Wire.endTransmission();
 
-	// Start readout at X MSB address
-	Wire.beginTransmission(MAG_address);
-	Wire.write((byte)0x01);
-	Wire.endTransmission();
+  delayMicroseconds(2);
 
-	delayMicroseconds(2);
+  // Read out data using multiple byte read mode
+  Wire.requestFrom(MAG_address, 6);
+  while( Wire.available() != 6 ) {}
 
-	// Read out data using multiple byte read mode
-	Wire.requestFrom(MAG_address, 6);
- 	while( Wire.available() != 6 ) {}
+  // Combine registers
+  uint16_t values[3];
+  for(uint8_t idx = 0; idx <= 2; idx++)
+  {
+    values[idx]  = Wire.read() << 8;  // MSB
+    values[idx] |= Wire.read();     // LSB
+  }
 
- 	// Combine registers
-	uint16_t values[3];
-	for(uint8_t idx = 0; idx <= 2; idx++)
-	{
-		values[idx]  = Wire.read() << 8;	// MSB
-		values[idx] |= Wire.read();			// LSB
-	}
+  // Put data into referenced variables
+  x = (int) values[0];
+  y = (int) values[1];
+  z = (int) values[2];
+  xmax = max(xmax, x);
+  xmin = min(xmin, x);
+  ymax = max(ymax, y);
+  ymin = min(ymin, y);
+  zmax = max(zmax, z);
+  zmin = min(zmin, z);
 
-	// Put data into referenced variables
-	*x = (int) values[0];
-	*y = (int) values[1];
-	*z = (int) values[2];
+  *xR = x - (xmax + xmin) / 2;
+  *yR = y - (ymax + ymin) / 2;
+  *zR = z - (zmax + zmin) / 2;
 
 }
-
-/*void getHeading() {
-	int MAG_x, MAG_y, MAG_z;
-	MAG(&MAG_x, &MAG_y, &MAG_z);
-	heading = atan2((float)MAG_y,(float)MAG_x);
-}*/
 
 void getHeading() {
   int x, y, z;
