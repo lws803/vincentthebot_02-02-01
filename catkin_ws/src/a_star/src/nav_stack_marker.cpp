@@ -13,6 +13,9 @@
 #include <set>
 #include <vector>
 #include <queue>
+#include <std_msgs/Int32MultiArray.h>
+#include <std_msgs/Bool.h>
+
 
 
 using namespace std;
@@ -20,11 +23,13 @@ using namespace ros;
 
 
 int curr_x, curr_y;
-int end_x = 3 + 512, end_y = 3 + 512;
+int end_x = 0, end_y = 0;
 nav_msgs::OccupancyGrid::Ptr local_map;
 nav_msgs::Path path;
 Publisher path_pub;
 Publisher endpoint_pub;
+Publisher heading_steps;
+
 int height_out, width_out;
 
 
@@ -300,7 +305,15 @@ public:
 		    cout << "Total distance to next junction: " << steps_start << endl;
 		    cout << "Total steps: " << steps << endl;
 
-	    }else {
+            std_msgs::Int32MultiArray msg; 
+            vector<int> my_pair;
+            my_pair.push_back(find_heading(start));
+            my_pair.push_back(steps_start);
+            msg.data = my_pair;
+            heading_steps.publish (msg);
+	    
+
+        }else {
 	    	cout << "endpoint not found" << endl;
 	    }
 
@@ -308,38 +321,12 @@ public:
 
 	}
 
-
-
-
-	
 };
 
 void pose_data_callback (const geometry_msgs::PoseStamped::Ptr& data) {
 	// TODO: might need to import geometry_msgs/Pose.h
 	curr_x = data->pose.position.x;
 	curr_y =data->pose.position.y;
-
-	a_star graph(local_map);
-	graph.generate_path();
-
-	// TODO: Publish the path properly and fix the crash when curr position = end position 
-	geometry_msgs::PoseStamped endpoint_pose;
-
-	endpoint_pose.pose.position.x = end_x;
-	endpoint_pose.pose.position.y = end_y;
-	endpoint_pose.header.frame_id = "/map";
-	endpoint_pose.pose.orientation.w = 1.0;
-
-
-	path.header.frame_id = "/map";
-	if (ok()) {
-		cout << "Path size: " << path.poses.size() << endl;
-		path_pub.publish(path);
-		endpoint_pub.publish(endpoint_pose);
-
-	}
-	path.poses.clear();
-
 }
 
 
@@ -347,7 +334,39 @@ void pose_data_callback (const geometry_msgs::PoseStamped::Ptr& data) {
 void map_callback(const nav_msgs::OccupancyGrid::Ptr &data)
 {
     // Receive data here
-	local_map = data;
+    local_map = data;
+}
+
+
+
+void end_coords_callback (const std_msgs::Int32MultiArray::Ptr &data) {
+    end_x = data->data[0] + 512;
+    end_y = data->data[1] + 512;
+}
+
+void gen_a_star_callback (const std_msgs::Bool::Ptr &data) {
+    // gen a_star everytime it receives - non continuous a_star
+    a_star graph(local_map);
+    graph.generate_path();
+
+    // TODO: Publish the path properly and fix the crash when curr position = end position 
+    geometry_msgs::PoseStamped endpoint_pose;
+
+    endpoint_pose.pose.position.x = end_x;
+    endpoint_pose.pose.position.y = end_y;
+    endpoint_pose.header.frame_id = "/map";
+    endpoint_pose.pose.orientation.w = 1.0;
+
+
+    path.header.frame_id = "/map";
+    if (ok()) {
+        cout << "Path size: " << path.poses.size() << endl;
+        path_pub.publish(path);
+        endpoint_pub.publish(endpoint_pose);
+
+    }
+    path.poses.clear();
+
 }
 
 int main(int argc, char **argv){
@@ -358,9 +377,13 @@ int main(int argc, char **argv){
     NodeHandle n;
     path_pub = n.advertise<nav_msgs::Path>("new_path", 1);
     endpoint_pub = n.advertise<geometry_msgs::PoseStamped> ("end_point", 1);
+    heading_steps = n.advertise<std_msgs::Int32MultiArray> ("heading_step", 1);
 
     Subscriber sub = n.subscribe("/map", 1, map_callback); // This will call A* itself and control the systems  
     Subscriber sub3 = n.subscribe("/slam_out_pose", 1, pose_data_callback); // This will update global map metadata
+    Subscriber sub2 = n.subscribe("/markers_a_star", 1, end_coords_callback);
+    Subscriber sub4 = n.subscribe("/a_star_call", 1, gen_a_star_callback);
+
 
     spin();
 }

@@ -3,6 +3,7 @@
 #include <geometry_msgs/PoseStamped.h>
 #include "ros/ros.h"
 #include <nav_msgs/MapMetaData.h>
+#include <std_msgs/Int32MultiArray.h>
 #include <visualization_msgs/Marker.h>
 #include <iostream>
 #include <stack>
@@ -15,6 +16,7 @@ int curr_x;
 int curr_y;
 int mode = 0;
 Publisher marker_pub;
+Publisher a_star_marker;
 
 
 stack<visualization_msgs::Marker> waypoints; 
@@ -36,9 +38,16 @@ void pose_data_callback (const geometry_msgs::PoseStamped::Ptr& data) {
             marker_pub.publish (waypoints.top());
             
             cout << (waypoints.top().pose.position.x) << ", " << (waypoints.top().pose.position.y) << " popped" << endl;
-	    waypoints.pop();
+            waypoints.pop();
             // Play music here too 
 
+        }else {
+            std_msgs::Int32MultiArray msg;
+            vector<int> arr;
+            arr.push_back((int)waypoints.top().pose.position.x);
+            arr.push_back((int)waypoints.top().pose.position.y);
+            msg.data = arr;
+            a_star_marker.publish(msg);
         }
     }
 }
@@ -55,7 +64,7 @@ int main (int argc, char **argv) {
     // Get current location 
     Subscriber sub3 = n.subscribe("/slam_out_pose", 1, pose_data_callback); // This will update global map metadata
     marker_pub = n.advertise<visualization_msgs::Marker> ("markers", 1);
-
+    a_star_marker = n.advertise<std_msgs::Int32MultiArray> ("markers_a_star", 1);
 
 	while (cin >> cmd) {
         if (cmd == 'x') {

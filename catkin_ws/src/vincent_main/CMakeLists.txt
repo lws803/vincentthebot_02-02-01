@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(a_star)
+project(vincent_main)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -7,8 +7,6 @@ project(a_star)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-
-
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   nav_msgs
@@ -16,7 +14,6 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
 )
-
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -109,7 +106,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES a_star
+#  LIBRARIES vincent_main
 #  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
@@ -120,32 +117,24 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
+
+add_compile_options(-std=c++11)
+
+
 include_directories(
-  include
+# include
   ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/a_star.cpp
+#   src/${PROJECT_NAME}/vincent_main.cpp
 # )
 
 
-
-
-# Beginning of c++ src 
-
-
-add_executable(nav_stack src/nav_stack.cpp)
-target_link_libraries(nav_stack ${catkin_LIBRARIES})
-add_dependencies(nav_stack ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-add_executable(nav_stack_marker src/nav_stack_marker.cpp)
-target_link_libraries(nav_stack_marker ${catkin_LIBRARIES})
-add_dependencies(nav_stack_marker ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-
-#add_compile_options(-std=c++17)
+add_executable(vincent_main src/main.cpp src/serial.cpp src/serialize.cpp)
+target_link_libraries(vincent_main ${catkin_LIBRARIES})
+add_dependencies(vincent_main ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 
 
@@ -158,7 +147,7 @@ add_dependencies(nav_stack_marker ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_E
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/a_star_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/vincent_main_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -215,7 +204,7 @@ add_dependencies(nav_stack_marker ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_E
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_a_star.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_vincent_main.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
