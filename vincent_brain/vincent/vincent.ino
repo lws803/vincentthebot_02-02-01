@@ -163,8 +163,8 @@ volatile TDirection dir = STOP;
 #define RR 10  // Right reverse pin -> PB2
 
 // Determine if left/right adjustments are needed
-#define NEED_ADJUST_LEFT 0 
-#define NEED_ADJUST_RIGHT 1
+#define NEED_ADJUST_LEFT  20
+#define NEED_ADJUST_RIGHT 20
 
 // Vincent's length and breadth in cm
 #define VINCENT_LENGTH 17.5
@@ -224,7 +224,8 @@ unsigned long deltaTicks;
 unsigned long targetTicks;
 
 // Variables to keep track of current speed
-float currentSpeed;
+float currentLeftSpeed;
+float currentRightSpeed;
 
 // Variable to store bearings
 float heading;
@@ -346,7 +347,7 @@ void setup() {
 
 	vincentCirc = PI * vincentDiagonal;
 
-/*
+
 	//Initialize I2C communication
 	Wire.begin();
 
@@ -359,7 +360,7 @@ void setup() {
 	//Set active mode enabled
 	Wire.write((byte)0x01);
 	Wire.endTransmission();
-	*/
+	
 
 }
 
@@ -382,11 +383,11 @@ void loop() {
 			}
 			
 			// check right and left obstacles
-			/*if (hasLeftObstacle()) {
-				adjustRight(20);
+			if (hasLeftObstacle()) {
+				adjustRight(NEED_ADJUST_RIGHT);
 			} else if (hasRightObstacle()) {
-				adjustLeft(20);
-			}*/
+				adjustLeft(NEED_ADJUST_LEFT);
+			}
 		}
 		else if (dir == BACKWARD) {
 			if (reverseDist > newDist) {
@@ -396,11 +397,11 @@ void loop() {
 			}
 			
 			// check right and left obstacles
-			/*if (hasLeftObstacle()) {
-				adjustRight(20);
+			if (hasLeftObstacle()) {
+				adjustRight(NEED_ADJUST_RIGHT);
 			} else if (hasRightObstacle()) {
-				adjustLeft(20);
-			}*/
+				adjustLeft(NEED_ADJUST_LEFT);
+			}
 		}
 		else if (dir == STOP) {
 			deltaDist = 0;
@@ -1010,7 +1011,8 @@ void forward(float dist, float speed)
 	dir = FORWARD;
 
 	// Set current speed
-	currentSpeed = speed;
+	currentLeftSpeed = speed;
+	currentRightSpeed = speed;
 
 	// it is now moving
 	sendMoveOK();
@@ -1048,8 +1050,9 @@ void reverse(float dist, float speed)
 	dir = BACKWARD;
 
 	// Set current speed
-	currentSpeed = speed;
-
+	currentRightSpeed = speed;
+	currentLeftSpeed = speed;
+	
 	// it is now moving
 	sendMoveOK();
 	
@@ -1161,7 +1164,7 @@ void right(float ang, float speed)
 	
 	//setSpeeds(speed, 0);
 	//motors.setSpeeds(speed, 0); spot turn
-  motors.setSpeeds(speed, -speed);
+	motors.setSpeeds(speed, -speed);
 }
 
 void leftMAG (float ang, float speed) {
@@ -1174,7 +1177,7 @@ void leftMAG (float ang, float speed) {
   destBearing = curBearing - ang;
   if (destBearing < 0) destBearing += 360;
 
-  motors.setSpeeds(0, speed);
+  motors.setSpeeds(-speed, speed);
 }
 
 void rightMAG (float ang, float speed) {
@@ -1187,7 +1190,7 @@ void rightMAG (float ang, float speed) {
   destBearing = curBearing + ang;
   if (destBearing > 360) destBearing -= 360;
 
-  motors.setSpeeds(speed, 0);
+  motors.setSpeeds(speed, -speed);
 }
 
 
@@ -1206,8 +1209,8 @@ void adjustLeft(float increment)
 	//int rightVal = pwmVal(currentSpeed + increment);
 	
 	//setSpeeds(currentSpeed, currentSpeed + increment);
-	motors.setSpeeds(currentSpeed, currentSpeed + increment);
-	
+	motors.setSpeeds(currentLeftSpeed, currentRightSpeed + increment);
+	currentRightSpeed += increment;
 	//analogWrite(LF, leftVal);
 	//analogWrite(RF, rightVal);
 	//analogWrite(LR, 0);
@@ -1229,7 +1232,8 @@ void adjustRight(float increment)
 	//int leftVal = pwmVal(currentSpeed + increment);
 
 	//setSpeeds(currentSpeed + increment, currentSpeed);
-	motors.setSpeeds(currentSpeed + increment, currentSpeed);
+	motors.setSpeeds(currentLeftSpeed + increment, currentRightSpeed);
+	currentLeftSpeed += increment;
 	
 	// Write the values to motors
 	//analogWrite(RF, rightVal);
@@ -1337,21 +1341,21 @@ void MAG(int* xR, int* yR, int* zR) {
 void getHeading() {
   int x, y, z;
   float temp = 0;
-  for (int i = 0; i < 5; i++) { 
+  /*for (int i = 0; i < 5; i++) { 
     MAG(&x, &y, &z);
     temp += atan2(-y, x) * DEG_PER_RAD;
-  }
-  heading = temp/5 + 180;
+  }*/
+  heading = atan2(-y, x) * DEG_PER_RAD;
 }
 
 float getBearing() {
   int x, y, z;
   float temp = 0;
-  for (int i = 0; i < 5; i++) { 
+  /*for (int i = 0; i < 5; i++) { 
     MAG(&x, &y, &z);
     temp += atan2(-y, x) * DEG_PER_RAD;
-  }
-  return temp/5 + 180;
+  }*/
+  return atan2(-y,x) * DEG_PER_RAD;
 }
 
 // Clears all our counters
