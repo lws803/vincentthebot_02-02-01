@@ -437,22 +437,23 @@ void loop() {
 		}
 	}
 
-	/*
+  /*
   // Turning with magnetometer measurement
   if (turn) {
-    if (dir == LEFT) {
-      while (getBearing() > destBearing) {}
-	  
+    if (dir == LEFT || dir == RIGHT) {
+      while(1) {
+        int upBound = destBearing + 3;
+        int lowBound = destBearing - 3;
+
+        if (upBound > 360) upBound -= 360.0;
+        if (lowBound < 0) lowBound += 360.0;
+
+        if (getBearing() <= upBound && getBearing() >= lowBound) break;
+      }
+      
       curBearing = destBearing = 0;
       turn = false;
-      stop();
-    }
-    else if (dir == RIGHT) {
-      while (getBearing() < destBearing) {}
-	  
-      curBearing = destBearing = 0;
-      turn = false;
-      stop();
+      stop(); 
     }
     else if (dir == STOP) {
       curBearing = destBearing = 0;
@@ -1313,13 +1314,13 @@ void MAG(int* xR, int* yR, int* zR) {
 void getHeading() {
   int x, y, z;
   MAG(&x, &y, &z);
-  heading = atan2(-y, x) * DEG_PER_RAD;
+  heading = atan2(-y, x) * DEG_PER_RAD + 180;
 }
 
 float getBearing() {
   int x, y, z;
   MAG(&x, &y, &z);
-  return atan2(-y,x) * DEG_PER_RAD;
+  return atan2(-y,x) * DEG_PER_RAD + 180;
 }
 
 // Clears all our counters
