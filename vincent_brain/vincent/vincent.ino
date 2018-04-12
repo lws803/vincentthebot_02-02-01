@@ -472,7 +472,7 @@ void loop() {
 				upBound = 6.0;
 			}
 			cur = getBearing();
-				
+			
 			if (cur <= upBound && cur >= lowBound) break;
 		}
       
