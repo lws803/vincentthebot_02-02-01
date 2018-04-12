@@ -24,5 +24,5 @@ void loop() {
   else {
     Serial.print("Obstacles detected on both sides!\n");
   }
-  delay(500);    // in ms
+  //delay(500);    // in ms
 }

@@ -166,8 +166,8 @@ volatile TDirection dir = STOP;
 #define RR 10  // Right reverse pin -> PB2
 
 // Determine if left/right adjustments are needed
-#define NEED_ADJUST_LEFT  80
-#define NEED_ADJUST_RIGHT 80
+#define NEED_ADJUST_LEFT  50
+#define NEED_ADJUST_RIGHT 50
 
 // Vincent's length and breadth in cm
 #define VINCENT_LENGTH 17.5
@@ -391,7 +391,7 @@ void loop() {
 			}
 			
 			// check right and left obstacles
-			else if (hasLeftObstacle() && !hasRightObstacle()) {
+			if (hasLeftObstacle() && !hasRightObstacle()) {
 				adjustRight(NEED_ADJUST_RIGHT);
 				sendMessage("adjusting right!");
 			}
@@ -455,40 +455,32 @@ void loop() {
 		}
 	}*/
 
-  
-  // Turning with magnetometer measurement
-  if (turn) {
-    if (dir == LEFT || dir == RIGHT) {
-		
-		int upBound = destBearing + 3;
-		int lowBound = destBearing - 3;
-		int cur;
-	  
-		while(1) {
+	 // Turning with magnetometer measurement
+	 if (turn) {
+		if (dir == LEFT || dir == RIGHT) {
+			int cur;
+			int upBound = destBearing + 3;
+			int lowBound = destBearing - 3;
 			if (upBound >= 360) upBound -= 360.0;
-			if (lowBound < 0) lowBound += 360.0;
+			if (lowBound <= 0) lowBound += 360.0;
 			if (lowBound > upBound) {
-				lowBound = 0.0;
-				upBound = 6.0;
-			}
-			cur = getBearing();
-			
-			if (cur <= upBound && cur >= lowBound) break;
-		}
-      
+				while(1) {
+					cur = getBearing();
+					if (cur <= upBound || cur >= lowBound) break;
+				}
+			} else {
+				while(1) {
+					cur = getBearing();
+					if (cur <= upBound && cur >= lowBound) break;
+				}
+			}			
+		} 
+		
 		curBearing = destBearing = 0;
 		turn = false;
 		stop(); 
-    } else if (dir == STOP) {
-		curBearing = destBearing = 0;
-		turn = false;
-		stop();
-    }
-  }
-  
-  
-  
-  
+	}
+    
 	// Retrieve packets from RasPi and handle them
 	TPacket recvPacket; // This holds commands from the Pi
 	TResult result = readPacket(&recvPacket);
@@ -1308,7 +1300,7 @@ void getHeading() {
 float getBearing() {
   int x, y, z;
   MAG(&x, &y, &z);
-  return atan2(-y,x) * DEG_PER_RAD + 180;
+  return atan2(-y, x) * DEG_PER_RAD + 180;
 }
 
 // Clears all our counters
