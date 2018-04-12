@@ -452,24 +452,23 @@ void loop() {
 		}
 	}
 
-	/*
+  /*
   // Turning with magnetometer measurement
   if (turn) {
-    if (dir == LEFT) {
-      while (getBearing() > destBearing) {
+    if (dir == LEFT || dir == RIGHT) {
+      while(1) {
+        int upBound = destBearing + 3;
+        int lowBound = destBearing - 3;
+
+        if (upBound > 360) upBound -= 360.0;
+        if (lowBound < 0) lowBound += 360.0;
+
+        if (getBearing() <= upBound && getBearing() >= lowBound) break;
       }
-	  
+      
       curBearing = destBearing = 0;
       turn = false;
-      stop();
-    }
-    else if (dir == RIGHT) {
-      while (getBearing() < destBearing) {
-      }
-	  
-      curBearing = destBearing = 0;
-      turn = false;
-      stop();
+      stop(); 
     }
     else if (dir == STOP) {
       curBearing = destBearing = 0;
@@ -1252,32 +1251,6 @@ void stop()
  * 
  */
 
-/*void MAG(int *xR, int *yR, int *zR) {
-	unsigned int data[6];
-
-	//Tell the MAg3110 where to begin reading data
-	Wire.beginTransmission(MAG_address);
-	Wire.write((byte)0x01); //Select register 1
-	Wire.endTransmission();
-
-	//Read data from each axis, 2 registers per axis
-	Wire.requestFrom(MAG_address, 6);
-	if (Wire.available() == 6){
-		data[0] = Wire.read();
-		data[1] = Wire.read();
-		data[2] = Wire.read();
-		data[3] = Wire.read();
-		data[4] = Wire.read();
-		data[5] = Wire.read();
-
-		*xR = ((data[1] * 256) + data[0]);
-		*yR = ((data[3] * 256) + data[2]);
-		*zR = ((data[5] * 256) + data[4]);
-	} else {   //return 0 value when data is unavailable or component is unplugged or malfunctioning
-		*xR = 0; *yR = 0; *zR = 0;
-	}
-}*/
-
 void MAG(int* xR, int* yR, int* zR) {
   int x, y, z;
   static int xmax = -1024, xmin = 1024, ymax = -1024, ymin = 1024, zmax = -1024, zmin = 1024;
@@ -1304,6 +1277,7 @@ void MAG(int* xR, int* yR, int* zR) {
   x = (int) values[0];
   y = (int) values[1];
   z = (int) values[2];
+  
   xmax = max(xmax, x);
   xmin = min(xmin, x);
   ymax = max(ymax, y);
@@ -1314,27 +1288,18 @@ void MAG(int* xR, int* yR, int* zR) {
   *xR = x - (xmax + xmin) / 2;
   *yR = y - (ymax + ymin) / 2;
   *zR = z - (zmax + zmin) / 2;
-
 }
 
 void getHeading() {
   int x, y, z;
-  float temp = 0;
-  /*for (int i = 0; i < 5; i++) { 
-    MAG(&x, &y, &z);
-    temp += atan2(-y, x) * DEG_PER_RAD;
-  }*/
-  heading = atan2(-y, x) * DEG_PER_RAD;
+  MAG(&x, &y, &z);
+  heading = atan2(-y, x) * DEG_PER_RAD + 180;
 }
 
 float getBearing() {
   int x, y, z;
-  float temp = 0;
-  /*for (int i = 0; i < 5; i++) { 
-    MAG(&x, &y, &z);
-    temp += atan2(-y, x) * DEG_PER_RAD;
-  }*/
-  return atan2(-y,x) * DEG_PER_RAD;
+  MAG(&x, &y, &z);
+  return atan2(-y,x) * DEG_PER_RAD + 180;
 }
 
 // Clears all our counters
