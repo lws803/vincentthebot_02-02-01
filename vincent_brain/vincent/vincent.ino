@@ -480,7 +480,7 @@ void loop() {
 		turn = false;
 		stop(); 
 	}
-    
+
 	// Retrieve packets from RasPi and handle them
 	TPacket recvPacket; // This holds commands from the Pi
 	TResult result = readPacket(&recvPacket);
