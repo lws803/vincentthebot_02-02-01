@@ -457,14 +457,15 @@ void loop() {
     if (dir == LEFT || dir == RIGHT) {
       int cur;
       int upBound = destBearing + 3;
-      int lowBound = destBearing - 3; 
-      while(1) {
-        if (upBound >= 360) upBound -= 360.0;
+      int lowBound = destBearing - 3;
+      if (upBound >= 360) upBound -= 360.0;
         if (lowBound <= 0) lowBound += 360.0;
         if (lowBound > upBound) {
           lowBound = 0.0;
           upBound = 6.0;
-        }
+      }
+      
+      while(1) {
         cur = getBearing();
         if (cur <= upBound && cur >= lowBound) break;
       }
