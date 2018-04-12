@@ -104,8 +104,10 @@ void setM1Speed(int speed) {
 	PORTD |= 0b10000000;	// write high
 	TCCR1B |= 0b00000001;	// starts timer 1
 	
-	if (speed 
-	OCR1B = speed; 
+	if (speed > 255)
+		OCR1B = 255;
+	else (speed >= 0)
+		OCR1B = speed;
 }
 
 void setM2Speed(int speed) {
@@ -125,6 +127,7 @@ void setM2Speed(int speed) {
 	TCCR1A = 0b10000001;	// sets timer 1
 	PORTB &= 0b00000001;	// write low
 	PORTB &= 0b00000100;	// write low
+	TCCR1B |= 0b00000001;	// starts timer 1`
 	
 	OCR1A = speed;
 }
@@ -379,7 +382,7 @@ void loop() {
 	// Check when Vincent can stop moving forward/backward after
 	// it is given a fixed distance to move forward/backward
 	if (deltaDist > 0) {
-		if (dir == FORWARD
+		if (dir == FORWARD) {
 			// Check when to stop after given distance
 			if (forwardDist > newDist) {
 				deltaDist = 0;
@@ -427,7 +430,7 @@ void loop() {
 	
 	
 	
-	
+	/*
 	// Check when Vincent can stop turning left/right after
 	// it is given a fixed angle to turn left/right
 	if (deltaTicks > 0) {
@@ -450,32 +453,38 @@ void loop() {
 			targetTicks = 0;
 			stop();
 		}
-	}
+	}*/
 
-  /*
+  
   // Turning with magnetometer measurement
   if (turn) {
     if (dir == LEFT || dir == RIGHT) {
-      while(1) {
-        int upBound = destBearing + 3;
-        int lowBound = destBearing - 3;
-
-        if (upBound > 360) upBound -= 360.0;
-        if (lowBound < 0) lowBound += 360.0;
-
-        if (getBearing() <= upBound && getBearing() >= lowBound) break;
-      }
+		
+		int upBound = destBearing + 3;
+		int lowBound = destBearing - 3;
+		int cur;
+	  
+		while(1) {
+			if (upBound >= 360) upBound -= 360.0;
+			if (lowBound < 0) lowBound += 360.0;
+			if (lowBound > upBound) {
+				lowBound = 0.0;
+				upBound = 6.0;
+			}
+			cur = getBearing();
+				
+			if (cur <= upBound && cur >= lowBound) break;
+		}
       
-      curBearing = destBearing = 0;
-      turn = false;
-      stop(); 
+		curBearing = destBearing = 0;
+		turn = false;
+		stop(); 
+    } else if (dir == STOP) {
+		curBearing = destBearing = 0;
+		turn = false;
+		stop();
     }
-    else if (dir == STOP) {
-      curBearing = destBearing = 0;
-      turn = false;
-      stop();
-    }
-  }*/
+  }
   
   
   
@@ -707,13 +716,13 @@ void handleCommand(TPacket *command)
 			break;
 		case COMMAND_TURN_LEFT:
 			sendOK();
-			left((float) command->params[0], (float) command->params[1]);
-			//leftMAG((float) command->params[0], (float) command->params[1]);
+			//left((float) command->params[0], (float) command->params[1]);
+			leftMAG((float) command->params[0], (float) command->params[1]);
 			break;
 		case COMMAND_TURN_RIGHT:
 			sendOK();
-			right((float) command->params[0], (float) command->params[1]);
-			//rightMAG((float) command->params[0], (float) command->params[1]);
+			//right((float) command->params[0], (float) command->params[1]);
+			rightMAG((float) command->params[0], (float) command->params[1]);
 			break;
 		case COMMAND_ADJUST_LEFT:
 			sendOK();
@@ -1259,7 +1268,7 @@ void MAG(int* xR, int* yR, int* zR) {
   Wire.write((byte)0x01);
   Wire.endTransmission();
 
-  delayMicroseconds(2);
+  //delayMicroseconds(2);
 
   // Read out data using multiple byte read mode
   Wire.requestFrom(MAG_address, 6);
