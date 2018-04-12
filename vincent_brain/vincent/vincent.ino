@@ -379,7 +379,7 @@ void loop() {
 	// Check when Vincent can stop moving forward/backward after
 	// it is given a fixed distance to move forward/backward
 	if (deltaDist > 0) {
-		if (dir == FORWARD
+		if (dir == FORWARD) {
 			// Check when to stop after given distance
 			if (forwardDist > newDist) {
 				deltaDist = 0;
@@ -455,18 +455,18 @@ void loop() {
   // Turning with magnetometer measurement
   if (turn) {
     if (dir == LEFT || dir == RIGHT) {
+      int cur;
+      int upBound = destBearing + 3;
+      int lowBound = destBearing - 3; 
       while(1) {
-        int upBound = destBearing + 3;
-        int lowBound = destBearing - 3;
-
         if (upBound >= 360) upBound -= 360.0;
-        if (lowBound =< 0) lowBound += 360.0;
+        if (lowBound <= 0) lowBound += 360.0;
         if (lowBound > upBound) {
-          lowBound = -5.0;
-          upBound = 5.0;
+          lowBound = 0.0;
+          upBound = 6.0;
         }
-
-        if (getBearing() <= upBound && getBearing() >= lowBound) break;
+        cur = getBearing();
+        if (cur <= upBound && cur >= lowBound) break;
       }
       
       curBearing = destBearing = 0;
