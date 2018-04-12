@@ -437,7 +437,6 @@ void loop() {
 		}
 	}
 
-  /*
   // Turning with magnetometer measurement
   if (turn) {
     if (dir == LEFT || dir == RIGHT) {
@@ -445,8 +444,12 @@ void loop() {
         int upBound = destBearing + 3;
         int lowBound = destBearing - 3;
 
-        if (upBound > 360) upBound -= 360.0;
-        if (lowBound < 0) lowBound += 360.0;
+        if (upBound >= 360) upBound -= 360.0;
+        if (lowBound =< 0) lowBound += 360.0;
+        if (lowBound > upBound) {
+          lowBound = -5.0;
+          upBound = 5.0;
+        }
 
         if (getBearing() <= upBound && getBearing() >= lowBound) break;
       }
@@ -460,7 +463,7 @@ void loop() {
       turn = false;
       stop();
     }
-  }*/
+  }
   
   
   
@@ -692,13 +695,13 @@ void handleCommand(TPacket *command)
 			break;
 		case COMMAND_TURN_LEFT:
 			sendOK();
-			left((float) command->params[0], (float) command->params[1]);
-			//leftMAG((float) command->params[0], (float) command->params[1]);
+			//left((float) command->params[0], (float) command->params[1]);
+			leftMAG((float) command->params[0], (float) command->params[1]);
 			break;
 		case COMMAND_TURN_RIGHT:
 			sendOK();
-			right((float) command->params[0], (float) command->params[1]);
-			//rightMAG((float) command->params[0], (float) command->params[1]);
+			//right((float) command->params[0], (float) command->params[1]);
+			rightMAG((float) command->params[0], (float) command->params[1]);
 			break;
 		case COMMAND_ADJUST_LEFT:
 			sendOK();
@@ -1320,7 +1323,7 @@ void getHeading() {
 float getBearing() {
   int x, y, z;
   MAG(&x, &y, &z);
-  return atan2(-y,x) * DEG_PER_RAD + 180;
+  return atan2(-y, x) * DEG_PER_RAD + 180;
 }
 
 // Clears all our counters
