@@ -152,8 +152,8 @@ volatile TDirection dir = STOP;
 #define WHEEL_CIRC 20.4
 
 // LEFT and RIGHT wheel PWM DIFFERENCE
-#define WHEEL_DIFF_FOR -35 
-#define WHEEL_DIFF_BAC -35
+#define WHEEL_DIFF_FOR 0 
+#define WHEEL_DIFF_BAC 0
 
 // Motor control pins. You need to adjust these till
 // Vincent moves in the correct direction
@@ -163,8 +163,8 @@ volatile TDirection dir = STOP;
 #define RR 10  // Right reverse pin -> PB2
 
 // Determine if left/right adjustments are needed
-#define NEED_ADJUST_LEFT  20
-#define NEED_ADJUST_RIGHT 20
+#define NEED_ADJUST_LEFT  80
+#define NEED_ADJUST_RIGHT 80
 
 // Vincent's length and breadth in cm
 #define VINCENT_LENGTH 17.5
@@ -226,6 +226,7 @@ unsigned long targetTicks;
 // Variables to keep track of current speed
 float currentLeftSpeed;
 float currentRightSpeed;
+float speedConstant;
 
 // Variable to store bearings
 float heading;
@@ -295,7 +296,6 @@ void left(float ang, float speed);
 void right(float ang, float speed);
 void adjustLeft(float increment);
 void adjustRight(float increment);
-int getAdjustReadings();
 void stop();
 
 // Handle the statistics
@@ -364,6 +364,10 @@ void setup() {
 
 }
 
+void normalizeSpeed() {
+	motors.setSpeeds(currentLeftSpeed, currentRightSpeed);
+}
+
 /*
  *
  * Continuous loop
@@ -375,7 +379,8 @@ void loop() {
 	// Check when Vincent can stop moving forward/backward after
 	// it is given a fixed distance to move forward/backward
 	if (deltaDist > 0) {
-		if (dir == FORWARD) {
+		if (dir == FORWARD
+			// Check when to stop after given distance
 			if (forwardDist > newDist) {
 				deltaDist = 0;
 				newDist = 0;
@@ -383,11 +388,21 @@ void loop() {
 			}
 			
 			// check right and left obstacles
-			if (hasLeftObstacle()) {
+			else if (hasLeftObstacle() && !hasRightObstacle()) {
 				adjustRight(NEED_ADJUST_RIGHT);
-			} else if (hasRightObstacle()) {
-				adjustLeft(NEED_ADJUST_LEFT);
+				sendMessage("adjusting right!");
 			}
+
+			else if (hasRightObstacle() && !hasLeftObstacle()) {
+				adjustLeft(NEED_ADJUST_LEFT);
+				sendMessage("adjusting left!");
+			}
+			
+			else if (!hasLeftObstacle() && !hasRightObstacle()) {
+				normalizeSpeed();				
+				sendMessage("normalizing!");
+			}
+			
 		}
 		else if (dir == BACKWARD) {
 			if (reverseDist > newDist) {
@@ -1199,57 +1214,21 @@ void rightMAG (float ang, float speed) {
 // Adjust Vincent left given degree of adjust
 // TODO: Figure out the way to compute the degree of adjustment
 void adjustLeft(float increment) 
-{
-	// Set the direction of travel
-	dir = LEFT;
-
-	// Compute the PWM values for Left-Forward and Right-Forward
-	// wheel directions. The Right-Forward is greater than
-	// Left-Forward with the difference depended on degree of
-	// adjustment
-	//int leftVal = pwmVal(currentSpeed);
-	//int rightVal = pwmVal(currentSpeed + increment);
-	
-	//setSpeeds(currentSpeed, currentSpeed + increment);
+{	
+	// Adjust the motors speed
 	motors.setSpeeds(currentLeftSpeed, currentRightSpeed + increment);
-	currentRightSpeed += increment;
-	//analogWrite(LF, leftVal);
-	//analogWrite(RF, rightVal);
-	//analogWrite(LR, 0);
-	//analogWrite(RR, 0);
+	
+	//currentRightSpeed += increment;
 }
 
 // Adjust Vincent right given degree of adjust
 // TODO: Figure out the way to compute the degree of adjustment
 void adjustRight(float increment) 
 {
-	// Set the direction of travel
-	dir = RIGHT;
-
-	// Compute the PWM values for Left-Forward and Right-Forward
-	// wheel directions. The Left-Forward is greater than
-	// Right-Forward with the difference depended on degree of
-	// adjustment
-	//int rightVal = pwmVal(currentSpeed);
-	//int leftVal = pwmVal(currentSpeed + increment);
-
-	//setSpeeds(currentSpeed + increment, currentSpeed);
+	// Adjust the motors speed
 	motors.setSpeeds(currentLeftSpeed + increment, currentRightSpeed);
-	currentLeftSpeed += increment;
 	
-	// Write the values to motors
-	//analogWrite(RF, rightVal);
-	//analogWrite(LF, leftVal);
-	//analogWrite(RR, 0);
-	//analogWrite(LR, 0);
-}
-
-// Determine if Vincent requires left/right adjustment by checking
-// external sensor readings
-// (RIGHT NOW USING IR SENSOR)
-int getAdjustReadings()
-{
-	return NEED_ADJUST_LEFT;
+	//currentLeftSpeed += increment;
 }
 
 // Stop Vincent. To replace with bare-metal code later.
@@ -1357,10 +1336,8 @@ void initializeState()
 
 void setupIR() {
 	// pin 12 for leftIR -> (PB4)
-	DDRB &= 0b11101111;	// set as input
-	
 	// pin 13 for rightIR -> (PB5)
-	DDRB &= 0b11011111;	// set as input
+	DDRB &= 0b11001111;	// set as input
 }
 
 bool hasLeftObstacle() {
