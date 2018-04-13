@@ -20,9 +20,9 @@ using namespace std;
 #define BAUD_RATE					B9600
 
 // Defined constants to indicate directions, distance and speed
-#define DEFAULT_SPEED				200 // Default move/turn speed
-#define DEFAULT_LEFT_TURN_SPEED		205 // Default left turn speed
-#define DEFAULT_RIGHT_TURN_SPEED	205 // Default right turn speed
+#define DEFAULT_SPEED				130 // Default move/turn speed
+#define DEFAULT_LEFT_TURN_SPEED		130 // Default left turn speed
+#define DEFAULT_RIGHT_TURN_SPEED	130 // Default right turn speed
 #define GRID_UNIT_DISTANCE			20 // Assume grid unit distance to be wheel circumference
 // Defined constants for movement command type
 #define MOVE_COMMAND 				0 // For forward/backward
@@ -298,7 +298,10 @@ int main()
 			}
 		}
 	}
-
+	
+	// Close the command stack back up file
+	stackBackup.close();
+	
 	//outputFile.close();
 	printf("Closing connection to Arduino.\n");
 	endSerial();
@@ -508,7 +511,9 @@ void printCommandList() {
 	printf("******************************\n");
 	printf("Commands:\n");
 	printf("f ---- forward\n");
+	printf("j ---- forward with IR mode\n");
 	printf("b ---- reverse\n");
+	printf("k ---- reverse with IR mode\n");
 	printf("l ---- turn left\n"); 
 	printf("r ---- turn right\n");
 	printf("s ---- stop\n");
@@ -559,6 +564,10 @@ commandTuple executeUserCommand() {
 	
 	// Build the command tuple
 	if (ch == 'f' || ch == 'F' ||ch == 'b' || ch == 'B') {
+		get<0>(cmdTup) = MOVE_COMMAND;
+		get<1>(cmdTup).push_back(ch);
+	}
+	else if (ch == 'j' || ch == 'J' ||ch == 'k' || ch == 'K') {
 		get<0>(cmdTup) = MOVE_COMMAND;
 		get<1>(cmdTup).push_back(ch);
 	}
@@ -620,11 +629,31 @@ float sendCommand(char command) {
 			canPrint = false;
 			break;
 
+		case 'j':
+		case 'J':
+			value = getParams(&commandPacket);
+			if (value < 0) return value;
+			commandPacket.command = COMMAND_FORWARD_IR;
+			sendPacket(&commandPacket);
+			READY_FLAG = false;
+			canPrint = false;
+			break;
+
 		case 'b':
 		case 'B':
 			value = getParams(&commandPacket);
 			if (value < 0) return value;
 			commandPacket.command = COMMAND_REVERSE;
+			sendPacket(&commandPacket);
+			READY_FLAG = false;
+			canPrint = false;
+			break;
+			
+		case 'k':
+		case 'K':
+			value = getParams(&commandPacket);
+			if (value < 0) return value;
+			commandPacket.command = COMMAND_REVERSE_IR;
 			sendPacket(&commandPacket);
 			READY_FLAG = false;
 			canPrint = false;
@@ -748,6 +777,9 @@ void invertCommand(commandTuple *tup) {
 // stack
 void pushCmdToStack(commandTuple *tup) {
 	backStack.push_back(*tup);
+	
+	// Append the command to command stack back up file
+	pushCmdToFile(tup);
 }
 
 // Call this to push in a custom command into the stack
@@ -786,6 +818,7 @@ void pushNewCmdToStack() {
 	pushCmdToStack(&tup);
 }
 
+// Call this to write command to command stack back up file
 void pushCmdToFile(commandTuple *tup) {
 	float value;
 	
@@ -796,11 +829,17 @@ void pushCmdToFile(commandTuple *tup) {
 		stackBackup << "RIGHT ";
 	else if (get<1>(*tup) == "f" || get<1>(*tup) == "F")
 		stackBackup << "FORWARD ";
-	else
+	else if (get<1>(*tup) == "j" || get<1>(*tup) == "J")
+		stackBackup << "FORWARD_IR ";
+	else if (get<1>(*tup) == "b" || get<1>(*tup) == "B")
 		stackBackup << "BACKWARD ";
+	else if (get<1>(*tup) == "k" || get<1>(*tup) == "K")
+		stackBackup << "BACKWARD_IR";
 	
 	stackBackup << get<2>(*tup);
+	stackBackup << "\n";
 }
+
 
 // Call this to pop the most top command in the back track command stack
 void popFromStack() {
@@ -815,6 +854,10 @@ void popFromStack() {
 	printf("\nNow we pop the most recent command..\n");
 	backStack.pop_back();
 	printCmdStack();
+}
+
+void popCmdFromFile(commandTuple *tup) {
+	
 }
 
 // Prints the back tracking command stack

@@ -1,5 +1,5 @@
-#define LEFT 13   
-#define RIGHT 12
+#define LEFT 12  
+#define RIGHT 13
 int detectionL = HIGH;    // no obstacle on left
 int detectionR = HIGH;    // no obstacle on right
 
