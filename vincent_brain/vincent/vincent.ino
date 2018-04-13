@@ -106,8 +106,10 @@ void setM1Speed(int speed) {
 	PORTD |= 0b10000000;	// write high
 	TCCR1B |= 0b00000001;	// starts timer 1
 	
-	if (speed 
-	OCR1B = speed; 
+	if (speed > 255)
+		OCR1B = 255;
+	else (speed >= 0)
+		OCR1B = speed;
 }
 
 void setM2Speed(int speed) {
@@ -127,6 +129,7 @@ void setM2Speed(int speed) {
 	TCCR1A = 0b10000001;	// sets timer 1
 	PORTB &= 0b00000001;	// write low
 	PORTB &= 0b00000100;	// write low
+	TCCR1B |= 0b00000001;	// starts timer 1`
 	
 	OCR1A = speed;
 }
@@ -406,6 +409,7 @@ void loop() {
 		}
 		else if (dir == FORWARD_IR) {
 			/*
+		if (dir == FORWARD) {
 			// Check when to stop after given distance
 			if (forwardDist >= newDist) {
 				deltaDist = 0;
@@ -494,6 +498,32 @@ void loop() {
 			targetTicks = 0;
 			stop();
 		}
+	}*/
+/*
+	 // Turning with magnetometer measurement
+	 if (turn) {
+		if (dir == LEFT || dir == RIGHT) {
+			int cur;
+			int upBound = destBearing + 3;
+			int lowBound = destBearing - 3;
+			if (upBound >= 360) upBound -= 360.0;
+			if (lowBound <= 0) lowBound += 360.0;
+			if (lowBound > upBound) {
+				while(1) {
+					cur = getBearing();
+					if (cur <= upBound || cur >= lowBound) break;
+				}
+			} else {
+				while(1) {
+					cur = getBearing();
+					if (cur <= upBound && cur >= lowBound) break;
+				}
+			}			
+		} 
+		
+		curBearing = destBearing = 0;
+		turn = false;
+		stop(); 
 	}
 	*/
   
@@ -520,8 +550,6 @@ void loop() {
 			stop();
 		}
 	}
-  
-  
   
   
 	// Retrieve packets from RasPi and handle them
@@ -1300,7 +1328,7 @@ void MAG(int* xR, int* yR, int* zR) {
   Wire.write((byte)0x01);
   Wire.endTransmission();
 
-  delayMicroseconds(2);
+  //delayMicroseconds(2);
 
   // Read out data using multiple byte read mode
   Wire.requestFrom(MAG_address, 6);
@@ -1340,7 +1368,7 @@ void getHeading() {
 float getBearing() {
   int x, y, z;
   MAG(&x, &y, &z);
-  return atan2(-y,x) * DEG_PER_RAD + 180;
+  return atan2(-y, x) * DEG_PER_RAD + 180;
 }
 
 // Clears all our counters
