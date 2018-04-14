@@ -157,8 +157,8 @@ volatile TDirection dir = STOP;
 #define WHEEL_CIRC 20.4
 
 // LEFT and RIGHT wheel PWM DIFFERENCE
-#define MOTOR_CONST_LEFT 0 
-#define MOTOR_CONST_RIGHT 3
+#define MOTOR_CONST_LEFT 10 
+#define MOTOR_CONST_RIGHT 0
 
 // Motor control pins. You need to adjust these till
 // Vincent moves in the correct direction
@@ -234,6 +234,9 @@ float speedConstant;
 float heading;
 float curBearing;
 float destBearing;
+
+// Magnetometer position
+int x, y, z;
 
 // Variables to track autonomous states
 volatile bool AUTONOMOUS_FLAG = false  ;
@@ -338,13 +341,17 @@ void setup() {
 	cli();
 	setupEINT();
 	setupSerial();
+	
 	startSerial();
 	setupMotors();
 	startMotors();
+	
 	enablePullups();
 	initializeState();
 	sei();
-	setupIR();
+	
+	 setupIR();
+	
 
 	// Compute Vincent's diagonal and circumference
 	vincentDiagonal = sqrt((VINCENT_LENGTH * VINCENT_LENGTH) 
@@ -366,7 +373,13 @@ void setup() {
 	Wire.write((byte)0x01);
 	Wire.endTransmission();
 	
-
+	/*
+	// calibration code
+	int times = 0;
+	while (times < 4) {
+		rightMAG(340, 100);
+		times++;
+	}*/
 }
 
 /*
@@ -395,7 +408,7 @@ void loop() {
 			deltaDist = 0;
 			newDist = 0;
 			stop();
-			sendMessage("trying to stop!");
+			//sendMessage("trying to stop!");
 		}
 		if (dir == FORWARD) {
 			/*
@@ -422,25 +435,27 @@ void loop() {
 			// check right and left obstacles
 			if (hasLeftObstacle() && !hasRightObstacle()) {
 				adjustRight(NEED_ADJUST_RIGHT);
-				sendMessage("adjusting right!");
+				//sendMessage("adjusting right!");
 			}
 
 			else if (hasRightObstacle() && !hasLeftObstacle()) {
 				adjustLeft(NEED_ADJUST_LEFT);
-				sendMessage("adjusting left!");
+				//sendMessage("adjusting left!");
 			}
 			
 			else if (!hasLeftObstacle() && !hasRightObstacle()) {
 				normalizeSpeed();				
-				sendMessage("normalizing!");
+				//sendMessage("normalizing!");
 			}
 		}
 		else if (dir == BACKWARD) {
 			if (reverseDist >= newDist) {
 				deltaDist = 0;
 				newDist = 0;
-				stop();
+				//stop();
+				forward(20, 150);	// power break;
 			}
+			
 		}
 		else if (dir == BACKWARD_IR) {
 			// Check when to stop after given distance
@@ -499,7 +514,9 @@ void loop() {
 			stop();
 		}
 	}*/
-/*
+	
+	
+	
 	 // Turning with magnetometer measurement
 	 if (turn) {
 		if (dir == LEFT || dir == RIGHT) {
@@ -525,8 +542,8 @@ void loop() {
 		turn = false;
 		stop(); 
 	}
-	*/
-  
+	
+	/*
 	// Turning with magnetometer measurement
 	if (turn) {
 		if (dir == LEFT || dir == RIGHT) {
@@ -549,7 +566,7 @@ void loop() {
 			turn = false;
 			stop();
 		}
-	}
+	}*/
   
   
 	// Retrieve packets from RasPi and handle them
@@ -605,7 +622,7 @@ void loop() {
 /*
  * 
  * Vincent Communication Routines.
- * 
+ *                                   
  */
 
 TResult readPacket(TPacket *packet)
@@ -966,6 +983,10 @@ void setupEINT()
 
 }
 
+void stopEINT() {
+	EIMSK &= 0b00000000;
+}
+
 // Implement the external interrupt ISRs below.
 // INT0 ISR should call leftISR while INT1 ISR
 // should call rightISR.
@@ -1112,8 +1133,8 @@ void forward(float dist, float speed) {
 	newDist = forwardDist + deltaDist;
 
 	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
+	currentLeftSpeed = speed + MOTOR_CONST_LEFT;
+	currentRightSpeed = speed + MOTOR_CONST_RIGHT;
 
 	// Set motors speed
 	motors.setSpeeds(currentLeftSpeed, currentRightSpeed);
@@ -1133,8 +1154,8 @@ void forwardIR(float dist, float speed) {
 	newDist = forwardDist + deltaDist;
 
 	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
+	currentLeftSpeed = speed + MOTOR_CONST_LEFT;
+	currentRightSpeed = speed + MOTOR_CONST_RIGHT;
 	
 	// Set motors speed
 	motors.setSpeeds(currentLeftSpeed, currentRightSpeed);
@@ -1157,11 +1178,11 @@ void reverse(float dist, float speed) {
 	newDist = reverseDist + deltaDist;
 
 	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
+	currentLeftSpeed = speed + MOTOR_CONST_LEFT;
+	currentRightSpeed = speed + MOTOR_CONST_RIGHT;
 	
 	// Set motors speed
-	motors.setSpeeds(-currentLeftSpeed, -currentRightSpeed);
+	motors.setSpeeds(-currentLeftSpeed-40, -currentRightSpeed-40);
 	
 	// it is now moving
 	sendMoveOK();
@@ -1178,8 +1199,8 @@ void reverseIR(float dist, float speed) {
 	newDist = reverseDist + deltaDist;
 
 	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
+	currentLeftSpeed = speed + MOTOR_CONST_LEFT;
+	currentRightSpeed = speed + MOTOR_CONST_RIGHT;
 	
 	// Set motors speed
 	motors.setSpeeds(-currentLeftSpeed, -currentRightSpeed);
@@ -1204,8 +1225,8 @@ void left(float ang, float speed)
 	targetTicks = rightForwardTicksTurns + deltaTicks;
 	
 	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
+	currentLeftSpeed = speed + MOTOR_CONST_LEFT;
+	currentRightSpeed = speed + MOTOR_CONST_RIGHT;
 	
 	// Set motors speed
 	motors.setSpeeds(-currentLeftSpeed, currentRightSpeed);
@@ -1230,8 +1251,8 @@ void right(float ang, float speed)
 	targetTicks = leftForwardTicksTurns + deltaTicks;
 
 	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
+	currentLeftSpeed = speed + MOTOR_CONST_LEFT;
+	currentRightSpeed = speed + MOTOR_CONST_RIGHT;
 
 	// Set motors speed
 	motors.setSpeeds(currentLeftSpeed, -currentRightSpeed);
@@ -1253,13 +1274,13 @@ void leftMAG (float ang, float speed) {
 	// Set the direction of travel
 	dir = LEFT;
 	turn = true;
-
-	sendMoveOK();
+	
 	curBearing = getBearing();
 	destBearing = curBearing - ang;
 	if (destBearing < 0) destBearing += 360;
 
 	motors.setSpeeds(-speed, speed);
+	sendMoveOK();
 }
 
 void rightMAG (float ang, float speed) {
@@ -1267,12 +1288,12 @@ void rightMAG (float ang, float speed) {
 	dir = RIGHT;
 	turn = true;
 
-	sendMoveOK();
 	curBearing = getBearing();
 	destBearing = curBearing + ang;
 	if (destBearing > 360) destBearing -= 360;
 
 	motors.setSpeeds(speed, -speed);
+	sendMoveOK();
 }
 
 
@@ -1321,14 +1342,13 @@ void stop()
  */
 
 void MAG(int* xR, int* yR, int* zR) {
-  int x, y, z;
+  
   static int xmax = -1024, xmin = 1024, ymax = -1024, ymin = 1024, zmax = -1024, zmin = 1024;
   
   Wire.beginTransmission(MAG_address);
   Wire.write((byte)0x01);
   Wire.endTransmission();
 
-  //delayMicroseconds(2);
 
   // Read out data using multiple byte read mode
   Wire.requestFrom(MAG_address, 6);
@@ -1414,14 +1434,4 @@ bool hasLeftObstacle() {
 bool hasRightObstacle() {
 	if (PINB & 0b00100000)	return false;
 	else	return true;
-}
-
-
-// Light up red led for debugging
-void lightRed() 
-{
-	PORTD |= 0b00010000;
-	delay(500);
-	PORTD &= 0b11101111;
-	delay(500);
 }
