@@ -1293,7 +1293,7 @@ void rightMAG (float ang, float speed) {
 	if (destBearing > 360) destBearing -= 360;
 
 	motors.setSpeeds(speed, -speed);
-	sendMoveOK();
+	//sendMoveOK();
 }
 
 
