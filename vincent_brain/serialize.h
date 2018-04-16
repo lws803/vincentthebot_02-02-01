@@ -12,8 +12,7 @@ typedef enum
 	PACKET_BAD = 1,
 	PACKET_CHECKSUM_BAD = 2,
 	PACKET_INCOMPLETE = 3,
-	PACKET_COMPLETE = 4,
-	PACKET_AUTO_OK = 5
+	PACKET_COMPLETE = 4
 } TResult;
 
 int serialize(char *buffer, void *dataStructure, size_t size);

@@ -239,10 +239,11 @@ float destBearing;
 int x, y, z;
 
 // Variables to track autonomous states
-volatile bool AUTONOMOUS_FLAG = false  ;
+volatile bool AUTONOMOUS_FLAG = false;
 
 // Store current Vincent mode (default as remote)
 bool isAuto = false;
+bool isMoving = false;
 
 /* 
  *
@@ -388,6 +389,33 @@ void setup() {
  *
  */
 void loop() {
+	// Retrieve packets from RasPi and handle them
+	TPacket recvPacket; // This holds commands from the Pi
+	TResult result = readPacket(&recvPacket);
+	
+	// If autonomous mode is activated, send autonomous type packets
+	// This is to ensure the main program retry autonomous commands
+	// that did not successfully go through to Arduino
+	
+	if(result == PACKET_OK) {
+		sendMessage("packet is ok\n");
+		handlePacket(&recvPacket);;
+	} else {
+		if(result == PACKET_BAD) 
+		{
+			sendMessage("packet is bad\n");
+			sendBadPacket();
+		}
+		else {
+			if(result == PACKET_CHECKSUM_BAD) {
+				sendMessage("packet is bad checksum\n");
+				sendBadChecksum();
+			}
+		}
+	}
+	
+	//if (result == PACKET_COMPLETE) sendMessage("packet complete\n");
+	//if (result == PACKET_INCOMPLETE) sendMessage("packet incomplete\n");
 
 	// TWO DIFFERENT MODES OF MOVEMENT
 	// IR MODE
@@ -403,52 +431,55 @@ void loop() {
 	// Additionally, if the forward/reverse command is given in IR mode,
 	// path correction is enabled
 	if (deltaDist > 0) {
+		sendMessage("Delta dist more than zero\n");
+		/*
 		// Check when to stop after given distance
 		if (forwardDist >= newDist) {
 			deltaDist = 0;
 			newDist = 0;
 			stop();
-			//sendMessage("trying to stop!");
+			sendMessage("trying to stop!");
 		}
+		*/
 		if (dir == FORWARD) {
-			/*
+			sendMessage("Forward mode\n");
 			// Check when to stop after given distance
 			if (forwardDist >= newDist) {
 				deltaDist = 0;
 				newDist = 0;
 				stop();
 			}
-			*/
+			
 		}
 		else if (dir == FORWARD_IR) {
-			/*
-		if (dir == FORWARD) {
+			sendMessage("Forward ir mode\n");
+
+			// check right and left obstacles
+			if (hasLeftObstacle() && !hasRightObstacle() && (forwardDist < newDist) && isMoving) {
+				adjustRight(NEED_ADJUST_RIGHT);
+				sendMessage("adjusting right!");
+			}
+
+			else if (hasRightObstacle() && !hasLeftObstacle() && (forwardDist < newDist) && isMoving) {
+				adjustLeft(NEED_ADJUST_LEFT);
+				sendMessage("adjusting left!");
+			}
+			
+			else if (!hasLeftObstacle() && !hasRightObstacle() && (forwardDist < newDist) && isMoving) {
+				normalizeSpeed();				
+				sendMessage("normalizing!");
+			}
+
 			// Check when to stop after given distance
-			if (forwardDist >= newDist) {
+			if (forwardDist >= newDist && isMoving) {
+				sendMessage("trying to stop!");
 				deltaDist = 0;
 				newDist = 0;
 				stop();
-				sendMessage("trying to stop!");
-			}
-			*/
-			
-			// check right and left obstacles
-			if (hasLeftObstacle() && !hasRightObstacle()) {
-				adjustRight(NEED_ADJUST_RIGHT);
-				//sendMessage("adjusting right!");
-			}
-
-			else if (hasRightObstacle() && !hasLeftObstacle()) {
-				adjustLeft(NEED_ADJUST_LEFT);
-				//sendMessage("adjusting left!");
-			}
-			
-			else if (!hasLeftObstacle() && !hasRightObstacle()) {
-				normalizeSpeed();				
-				//sendMessage("normalizing!");
 			}
 		}
 		else if (dir == BACKWARD) {
+			sendMessage("Backward mode\n");
 			if (reverseDist >= newDist) {
 				deltaDist = 0;
 				newDist = 0;
@@ -458,6 +489,7 @@ void loop() {
 			
 		}
 		else if (dir == BACKWARD_IR) {
+			sendMessage("Backward ir mode\n");
 			// Check when to stop after given distance
 			if (forwardDist >= newDist) {
 				deltaDist = 0;
@@ -519,6 +551,7 @@ void loop() {
 	
 	 // Turning with magnetometer measurement
 	 if (turn) {
+		 sendMessage("trying to turn\n");
 		if (dir == LEFT || dir == RIGHT) {
 			int cur;
 			int upBound = destBearing + 3;
@@ -567,56 +600,7 @@ void loop() {
 			stop();
 		}
 	}*/
-  
-  
-	// Retrieve packets from RasPi and handle them
-	TPacket recvPacket; // This holds commands from the Pi
-	TResult result = readPacket(&recvPacket);
 
-	// Handle packets differently if autonomous or remote
-	// 
-	// TODO: Do we really need to handle packets this way during 
-	// autonomous mode? Is it needed?
-	/*
-	   if (isAuto) {
-	   if (result == PACKET_AUTO_OK) {
-	   handlePacket(&recvPacket);
-	   } else {
-	   if (result == PACKET_BAD) {
-	   sendBadPacket();
-	   } else {
-	   if (result == PACKET_CHECKSUM_BAD)
-	   sendBadChecksum();
-	   }
-	   }
-
-	   } else {
-	   if(result == PACKET_OK)
-	   handlePacket(&recvPacket);
-	   else
-	   if(result == PACKET_BAD)
-	   {
-	   sendBadPacket();
-	   }
-	   else
-	   if(result == PACKET_CHECKSUM_BAD)
-	   sendBadChecksum();
-	   }
-	 */
-
-	if(result == PACKET_OK) {
-		handlePacket(&recvPacket);
-	} else {
-		if(result == PACKET_BAD) 
-		{
-			sendBadPacket();
-		}
-		else {
-			if(result == PACKET_CHECKSUM_BAD) {
-				sendBadChecksum();
-			}
-		}
-	}
 }
 
 /*
@@ -631,7 +615,6 @@ TResult readPacket(TPacket *packet)
 	// deserializes it.Returns deserialized
 	// data in "packet".
 	// We would need to declare the deserialize function
-
 	char buffer[PACKET_SIZE];
 	int len;
 
@@ -787,40 +770,56 @@ void handleCommand(TPacket *command)
 		// For turn left/right commands, param[0] = angle, param[1] = speed;
 		// For adjust left/right commands, param[0] = increment;
 		case COMMAND_FORWARD:
-			sendOK();
+			if (isAuto) {
+				sendOKAuto();
+			}
+			else {
+				sendOK();
+			}
+			isMoving = true;
 			forward((float) command->params[0], (float) command->params[1]);
 			break;
 		
 		case COMMAND_FORWARD_IR:
-			sendOK();
+			sendMessage("from arduino, we are moving with ir\n");
+			if (isAuto) sendOKAuto();
+			else sendOK();
+			isMoving = true;
 			forwardIR((float) command->params[0], (float) command->params[1]);
 			break;
 			
 		case COMMAND_REVERSE:
-			sendOK();
+			if (isAuto) sendOKAuto();
+			else sendOK();
 			reverse((float) command->params[0], (float) command->params[1]);
 			break;
 		
 		case COMMAND_REVERSE_IR:
-			sendOK();
+			if (isAuto) sendOKAuto();
+			else sendOK();
 			reverseIR((float) command->params[0], (float) command->params[1]);
 			break;
 			
 		case COMMAND_TURN_LEFT:
-			sendOK();
+			if (isAuto) sendOKAuto();
+			else sendOK();
 			//left((float) command->params[0], (float) command->params[1]);
 			leftMAG((float) command->params[0], (float) command->params[1]);
 			break;
 			
 		case COMMAND_TURN_RIGHT:
-			sendOK();
+			if (isAuto) sendOKAuto();
+			else sendOK();
 			//right((float) command->params[0], (float) command->params[1]);
 			rightMAG((float) command->params[0], (float) command->params[1]);
 			break;
 			
 		case COMMAND_STOP:
-			sendOK();
+			if (isAuto) sendOKAuto();
+			else sendOK();
+			isMoving = false;
 			stop();
+			sendReady();
 			break;
 			
 		case COMMAND_GET_STATS:
@@ -831,18 +830,6 @@ void handleCommand(TPacket *command)
 		case COMMAND_CLEAR_STATS:
 			sendOK();
 			clearOneCounter(command->params[0]);
-			sendReady();
-			break;
-			
-		case COMMAND_AUTO_MODE:
-			isAuto = true;
-			sendOKAuto();
-			sendReady();
-			break;
-			
-		case COMMAND_REMOTE_MODE:
-			isAuto = false;
-			sendOK();
 			sendReady();
 			break;
 			
@@ -916,8 +903,16 @@ void handlePacket(TPacket *packet)
 			break;
 
 		case PACKET_TYPE_AUTO:
-			AUTONOMOUS_FLAG = true;
+			isAuto = true;
+			sendOKAuto();
 			break;
+			
+		case PACKET_TYPE_REMOTE:
+			isAuto = false;
+			break;
+			
+		default:
+			sendMessage("Arduino received unknown packet type\n");
 	}
 }
 
@@ -1293,7 +1288,7 @@ void rightMAG (float ang, float speed) {
 	if (destBearing > 360) destBearing -= 360;
 
 	motors.setSpeeds(speed, -speed);
-	//sendMoveOK();
+	sendMoveOK();
 }
 
 
@@ -1326,6 +1321,7 @@ void stop()
 	//setSpeeds(0, 0);
 	motors.setSpeeds(0,0);
 
+	isMoving = false;
 	sendStopOK();
 	sendReady();
 }

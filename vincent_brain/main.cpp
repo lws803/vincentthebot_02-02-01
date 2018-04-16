@@ -20,9 +20,9 @@ using namespace std;
 #define BAUD_RATE					B9600
 
 // Defined constants to indicate directions, distance and speed
-#define DEFAULT_SPEED				130 // Default move/turn speed
-#define DEFAULT_LEFT_TURN_SPEED		130 // Default left turn speed
-#define DEFAULT_RIGHT_TURN_SPEED	130 // Default right turn speed
+#define DEFAULT_SPEED				110 // Default move/turn speed
+#define DEFAULT_LEFT_TURN_SPEED		110 // Default left turn speed
+#define DEFAULT_RIGHT_TURN_SPEED	110 // Default right turn speed
 #define GRID_UNIT_DISTANCE			20 // Assume grid unit distance to be wheel circumference
 // Defined constants for movement command type
 #define MOVE_COMMAND 				0 // For forward/backward
@@ -39,12 +39,12 @@ using namespace std;
 // LIDAR raw data to commands Pair
 // arg 1: Turn command (arg1: direction, arg2: angle)
 // arg 2: Forward/backward command (arg1: direction, arg2: distance)
-typedef pair< pair<string, float> , pair<string, float> > rawDataCommandPair;
+typedef pair< pair<char, float> , pair<char, float> > rawDataCommandPair;
 // Execution command tuple
 // arg 1: Command type --> TURN or MOVE
 // arg 2: Direction
 // arg 3: Angle/Distance
-typedef tuple<int, string, float> commandTuple;
+typedef tuple<int, char, float> commandTuple;
 // Checkpoint markers
 // arg 1: Checkpoint index position
 // arg 2: y - coordinate
@@ -64,7 +64,7 @@ volatile bool isMoving = false;
 // Printing ready flag
 volatile bool canPrint = true;
 // Keep track of autonomous mode routine
-volatile bool AUTONOMOUS_FLAG = false;
+volatile bool isAuto = false;
 volatile bool AUTO_RECEIVE_OK = false;
 float currentHeading = 0;
 float nextHeading = 0;
@@ -105,6 +105,9 @@ void popFromStack();
 void printCmdStack();
 void processCommand(commandTuple cmdTup);
 void setEndPoint(TPacket *commandPacket);
+// Backtracking
+void activateAutonomous();
+void deactivateAutonomous();
 // Process raw data from LIDAR
 rawDataCommandPair processRawData(float currentHeading, 
 	float nextHeading, int gridSteps);
@@ -112,17 +115,23 @@ rawDataCommandPair processRawData(float currentHeading,
 // Debugging function
 void printCmd(commandTuple &tup) {
 	printf("\n\nDirection: ");
-	if (get<1>(tup) == "f") {
-		printf("Forward\n");
+	if (get<1>(tup) == 'f') {
+		printf("Forward ");
 	}
-	else if (get<1>(tup) == "b") {
-		printf("Backward\n");
+	else if (get<1>(tup) == 'b') {
+		printf("Backward ");
 	}
-	else if (get<1>(tup) == "l") {
-		printf("Left\n");
+	else if (get<1>(tup) == 'l') {
+		printf("Left ");
 	}
-	else {
-		printf("Right\n");
+	else if (get<1>(tup) == 'r') {
+		printf("Right ");
+	}
+	else if (get<1>(tup) == 'j') {
+		printf("Forward with IR ");
+	}
+	else if (get<1>(tup) == 'k') {
+		printf("Backward with IR ");
 	}
 
 	printf("Value: %0.2f\n\n", get<2>(tup));
@@ -149,10 +158,6 @@ int main()
 	TPacket helloPacket;
 	helloPacket.packetType = PACKET_TYPE_HELLO;
 	sendPacket(&helloPacket);
-	
-	// Autonomous packet
-	TPacket autoPacket;
-	autoPacket.packetType = PACKET_TYPE_AUTO;
 	
 	// Failed autonomous command counter
 	int autoFailedCount = 0;
@@ -185,36 +190,63 @@ int main()
 		 * 	Vincent only reads the next command when Arduino sends
 		 * 	back a "ready" packet back.
 		 */
-		if (AUTONOMOUS_FLAG) {
+		if (isAuto) {
+			//printf("Auto failed count: %d\n", autoFailedCount);
 			// If command stack is empty, stop autonomous mode
 			// If the max retries for failed command is reach, stop autonomous mode
-			if (backStack.empty() || autoFailedCount == MAX_AUTO_FAIL) {
-				AUTONOMOUS_FLAG = false;
-				if (autoFailedCount == MAX_AUTO_FAIL)
-					backStack.push_back(errorCommand);
+			if ((backStack.empty() || autoFailedCount == MAX_AUTO_FAIL) && !isMoving) {
+				if (backStack.empty()) {
+					//printf("Stack empty!\n");
+				}
+				if (autoFailedCount == MAX_AUTO_FAIL) {
+					//printf("Auto failed reached max!\n");
+				}
 				
+				if (autoFailedCount == MAX_AUTO_FAIL)
+					pushCmdToStack(&errorCommand);
+				
+				deactivateAutonomous();
 				continue;
 			}
+
+			/*
+			if (isMoving) {
+				printf("is moving\n");
+			}
+			
+			if (READY_FLAG) {
+				printf("ready\n");
+			}
+			if (AUTO_RECEIVE_OK) {
+				printf("auto receive ok\n");
+			}
+			*/
 			
 			// Continuously process autonomous commands
 			if (AUTO_RECEIVE_OK && READY_FLAG && !isMoving) {
-				// Inform Arduino incoming autonomous packet
-				sendPacket(&autoPacket);
+				//printf("next command!\n");
+				while (!READY_FLAG) {}
+				
 				// Process the next command
-				processCommand(backStack.back());
-				errorCommand = backStack.back();
+				commandTuple sad = backStack.back();
+				//printCmd(sad);
+				processCommand(sad);
+				sleep(1);
+				errorCommand = sad;
 				backStack.pop_back();
 				autoFailedCount = 0;
 			}
+			
 			else if (!AUTO_RECEIVE_OK) {
+				printf("auto command not ok!\n");
+				// Set Arduino to autonomous mode
+				TPacket autoPacket;
+				autoPacket.packetType = PACKET_TYPE_AUTO;
 				sendPacket(&autoPacket);
 				// Re-process the current failed command
 				processCommand(errorCommand);
 				autoFailedCount++;
 				printf("Retrying for %d times\n", autoFailedCount);
-			}
-			else if (AUTO_RECEIVE_OK && (!READY_FLAG || isMoving)) {
-				continue;
 			}
 		}
 		else {
@@ -368,7 +400,7 @@ void handleResponse(TPacket *packet)
 			
 		case RESP_MOVE:
 			printf("Vincent started moving\n");
-			isMoving = true;
+			//isMoving = true;
 			break;
 			
 		case RESP_STOP:
@@ -495,13 +527,13 @@ void printInstructions(float *currHead, float *nextHead, int *steps, rawDataComm
 	printf("Movement commands required:\n");
 	// Vincent needs to turn first
 	if ((pair->first).second != 0) {
-		if ((pair->first).first == "r") printf("TURN RIGHT by ");
+		if ((pair->first).first == 'r') printf("TURN RIGHT by ");
 		else printf("TURN LEFT by ");
 		
 		printf("%0.2f degree\n", (pair->first).second);
 	}
 	
-	if ((pair->second).first == "f") printf("FORWARD by ");
+	if ((pair->second).first == 'f') printf("FORWARD by ");
 	else printf("BACKWARD by ");
 	printf("%0.2f CM\n", (pair->second).second);
 	printf("****************************************\n\n");
@@ -522,6 +554,7 @@ void printCommandList() {
 	printf("g ---- get stats\n");
 	printf("h ---- get current heading\n");
 	printf("a ---- autonomous mode\n");
+	printf("z ---- remote control\n");
 	printf("p ---- print the command stack\n");
 	printf("o ---- pop most recent command from stack\n");
 	printf("i ---- push a custom command into the stack\n");
@@ -565,15 +598,15 @@ commandTuple executeUserCommand() {
 	// Build the command tuple
 	if (ch == 'f' || ch == 'F' ||ch == 'b' || ch == 'B') {
 		get<0>(cmdTup) = MOVE_COMMAND;
-		get<1>(cmdTup).push_back(ch);
+		get<1>(cmdTup) = ch;
 	}
 	else if (ch == 'j' || ch == 'J' ||ch == 'k' || ch == 'K') {
 		get<0>(cmdTup) = MOVE_COMMAND;
-		get<1>(cmdTup).push_back(ch);
+		get<1>(cmdTup) = ch;
 	}
 	else if (ch == 'l' || ch == 'L' ||ch == 'r' || ch == 'R') {
 		get<0>(cmdTup) = TURN_COMMAND;
-		get<1>(cmdTup).push_back(ch);	
+		get<1>(cmdTup) = ch;	
 	}
 	else {
 		get<0>(cmdTup) = NON_MOVEMENT_COMMAND;
@@ -720,14 +753,12 @@ float sendCommand(char command) {
 		
 		case 'a':
 		case 'A':
-			AUTONOMOUS_FLAG = true;
-			READY_FLAG = false;
-			//getLidarData(&currentHeading, &nextHeading, &gridSteps);
-			printf("Switching to AUTONOMOUS mode...\n");
-			printf("To stop any time, input 's'\n");
-			commandPacket.command = COMMAND_AUTO_MODE;
-			sendPacket(&commandPacket);
-			sleep(2);  // Wait a little while..
+			activateAutonomous();
+			break;
+			
+		case 'z':
+		case 'Z':
+			deactivateAutonomous();
 			break;
 
 		case 'p':
@@ -766,10 +797,12 @@ float sendCommand(char command) {
 // Invert the input command for back tracking in future
 void invertCommand(commandTuple *tup) {
 	if (get<0>(*tup) == TURN_COMMAND) {
-		if (get<1>(*tup) == "l" || get<1>(*tup) == "L") 
-			get<1>(*tup) = "r";
+		if (get<1>(*tup) == 'l' || get<1>(*tup) == 'L') {
+			printf("changing to right command\n");
+			get<1>(*tup) = 'r';
+		}
 		else 
-			get<1>(*tup) = "l";
+			get<1>(*tup) = 'l';
 	}
 }
 
@@ -823,17 +856,17 @@ void pushCmdToFile(commandTuple *tup) {
 	float value;
 	
 	// Write the direction
-	if (get<1>(*tup) == "l" || get<1>(*tup) == "L")
+	if (get<1>(*tup) == 'l' || get<1>(*tup) == 'L')
 		stackBackup << "LEFT ";
-	else if (get<1>(*tup) == "r" || get<1>(*tup) == "R")
+	else if (get<1>(*tup) == 'r' || get<1>(*tup) == 'R')
 		stackBackup << "RIGHT ";
-	else if (get<1>(*tup) == "f" || get<1>(*tup) == "F")
+	else if (get<1>(*tup) == 'f' || get<1>(*tup) == 'F')
 		stackBackup << "FORWARD ";
-	else if (get<1>(*tup) == "j" || get<1>(*tup) == "J")
+	else if (get<1>(*tup) == 'j' || get<1>(*tup) == 'J')
 		stackBackup << "FORWARD_IR ";
-	else if (get<1>(*tup) == "b" || get<1>(*tup) == "B")
+	else if (get<1>(*tup) == 'b' || get<1>(*tup) == 'B')
 		stackBackup << "BACKWARD ";
-	else if (get<1>(*tup) == "k" || get<1>(*tup) == "K")
+	else if (get<1>(*tup) == 'k' || get<1>(*tup) == 'K')
 		stackBackup << "BACKWARD_IR";
 	
 	stackBackup << get<2>(*tup);
@@ -868,17 +901,23 @@ void printCmdStack() {
 	printf("==================================================\n");
 	if (backStack.empty()) printf("\t\tSTACK IS EMPTY!\n");
 	for (auto it = backStack.rbegin(); it != backStack.rend(); it++) {
-		if (get<1>(*it) == "f") {
+		if (get<1>(*it) == 'f') {
 			printf("FORWARD - - -|| - - - %0.2f CM\n", get<2>(*it));
 		}
-		else if (get<1>(*it) == "b") {
+		else if (get<1>(*it) == 'b') {
 			printf("BACKWARD - - || - - - %0.2f CM\n", get<2>(*it));
 		}
-		else if (get<1>(*it) == "l") {
+		else if (get<1>(*it) == 'l') {
 			printf("LEFT - - - - || - - - %0.2f DEGREE\n", get<2>(*it));
 		}
-		else {
+		else if (get<1>(*it) == 'r') {
 			printf("RIGHT - - - -|| - - - %0.2f DEGREE\n", get<2>(*it));
+		}
+		else if (get<1>(*it) == 'j') {
+			printf("FORWARD IR - || - - - %0.2f CM\n", get<2>(*it));
+		}
+		else if (get<1>(*it) == 'k') {
+			printf("BACKWARD IR -|| - - - %0.2f CM\n", get<2>(*it));
 		}
 	}
 	
@@ -914,39 +953,59 @@ void processCommand(commandTuple cmdTup) {
 	TPacket commandPacket;
 	commandPacket.packetType = PACKET_TYPE_COMMAND;
 	
-	switch(get<1>(cmdTup)[0]) {
+	switch(get<1>(cmdTup)) {
 		case 'f':
 		case 'F':
 			commandPacket.command = COMMAND_FORWARD;
 			commandPacket.params[1] = DEFAULT_SPEED;
+			isMoving = true;
 			break;
+			
+		case 'j':
+		case 'J':
+			commandPacket.command = COMMAND_FORWARD_IR;
+			commandPacket.params[1] = DEFAULT_SPEED;
+			isMoving = true;
+			break;
+			
 		case 'b':
 		case 'B':
 			commandPacket.command = COMMAND_REVERSE;
 			commandPacket.params[1] = DEFAULT_SPEED;
 			break;
+			
+		case 'k':
+		case 'K':
+			commandPacket.command = COMMAND_REVERSE_IR;
+			commandPacket.params[1] = DEFAULT_SPEED;
+			break;
+			
 		case 'l':
 		case 'L':
 			commandPacket.command = COMMAND_TURN_LEFT;
 			commandPacket.params[1] = DEFAULT_LEFT_TURN_SPEED;
 			break;
+			
 		case 'r':
 		case 'R':
 			commandPacket.command = COMMAND_TURN_RIGHT;
 			commandPacket.params[1] = DEFAULT_RIGHT_TURN_SPEED;
 			break;
+			
 		default:
-			printf("Invalid command from stack");
+			printf("Invalid command from stack\n");
 	}
 	
 	// Set the distance/angle value in command
-	commandPacket.params[0] = get<2>(cmdTup);
+	commandPacket.params[0] = (int)get<2>(cmdTup);
+	
+	//printf("The packet to be sent out is:\n");
+	//printf("%d, %d\n", commandPacket.command, commandPacket.params[1]);
 	
 	// Send the command to Arduino
 	sendPacket(&commandPacket);
 	
-	READY_FLAG = false;
-	isMoving = true;
+	//isMoving = true;
 }
 
 
@@ -971,6 +1030,44 @@ void setEndPoint(TPacket *commandPacket) {
 	sendPacket(&endPacket);
 	isMoving = true;
 	READY_FLAG = false;
+}
+
+void activateAutonomous() {
+	isAuto = true;
+	READY_FLAG = true;
+	isMoving = false;
+	//getLidarData(&currentHeading, &nextHeading, &gridSteps);
+	printf("Switching to AUTONOMOUS mode...\n");
+	printf("To stop any time, input 's'\n");
+	
+	// Set Arduino to autonomous mode
+	TPacket autoPacket;
+	autoPacket.packetType = PACKET_TYPE_AUTO;
+	sendPacket(&autoPacket);
+	
+	sleep(2);  // Wait a little while..
+}
+
+void deactivateAutonomous() {
+	isAuto = false;
+	READY_FLAG = true;
+	printf("Exiting from AUTONOMOUS mode...\n");
+	printf("Vincent will now attempt to stop current movement\n");
+	
+	/*
+	// Stop Vincent
+	TPacket stopPacket;
+	stopPacket.packetType = PACKET_TYPE_COMMAND;
+	stopPacket.command = COMMAND_STOP;
+	sendPacket(&stopPacket);
+	*/
+	/*
+	// Set Arduino to remote control
+	TPacket remotePacket;
+	remotePacket.packetType = PACKET_TYPE_REMOTE;
+	sendPacket(&remotePacket);
+	*/
+	sleep(2);	// Wait a little while...
 }
 
 /*
@@ -1008,7 +1105,7 @@ rawDataCommandPair processRawData(float currentHeading,
 	// Next, Vincent needs to determine the direction of based on the
 	// given heading
 	float turnAngle = nextHeading-currentHeading;
-	string direction;
+	char direction;
 	
 	// We can use -180 < x <= 180 (degrees) 
 	// with negative going left, positive going right 
@@ -1021,17 +1118,17 @@ rawDataCommandPair processRawData(float currentHeading,
 		turnAngle += 360;
 	
 	if (turnAngle > 0) {
-		direction = "r";
+		direction = 'r';
 	} 
 	else if (turnAngle < 0) {
-		direction = "l";
+		direction = 'l';
 		turnAngle = -turnAngle;
 	} 
 	else if (turnAngle == -180 || turnAngle == 180) {
-		direction = "f";
+		direction = 'f';
 	} 
 	else {
-		direction = "f";
+		direction = 'f';
 	}
 	
 	cmdPair = make_pair(make_pair(direction, turnAngle), make_pair(direction, moveDistance));
