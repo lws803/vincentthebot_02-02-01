@@ -131,7 +131,7 @@ int serialize(char *buffer, void *dataStructure, size_t size)
 	// Now we take a checksum
 	unsigned char checksum = 0;
 
-	unsigned i;
+	unsigned int i;
 
 	for(i=0; i<size; i++)
 		checksum ^= comms.buffer[i];
