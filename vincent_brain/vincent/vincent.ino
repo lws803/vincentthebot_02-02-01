@@ -269,7 +269,7 @@ void loop() {
         
         if(result == PACKET_OK) {
             sendMessage("packet is ok\n");
-            handlePacket(&recvPacket);;
+            handlePacket(&recvPacket);
         } else {
             if(result == PACKET_BAD)
             {

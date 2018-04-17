@@ -89,7 +89,7 @@ int main (int argc, char **argv) {
             marker_pub.publish (curr_marker);
 
             waypoints.push(curr_marker); 
-	    cout << curr_x << " " << curr_y << endl;
+            cout << curr_x << " " << curr_y << endl;
             cout << "Waypoint pushed!" << endl;
         }else if (cmd == 'y') {
             mode = 1;
