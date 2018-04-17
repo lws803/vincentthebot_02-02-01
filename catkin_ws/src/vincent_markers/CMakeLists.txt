@@ -132,6 +132,10 @@ add_executable(vincent_marker src/main.cpp)
 target_link_libraries(vincent_marker ${catkin_LIBRARIES})
 add_dependencies(vincent_marker ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+add_executable(marker_helper src/helper.cpp)
+target_link_libraries(marker_helper ${catkin_LIBRARIES})
+add_dependencies(marker_helper ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 
 
 
