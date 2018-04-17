@@ -31,9 +31,7 @@ typedef enum
 	FORWARD=1,
 	BACKWARD=2,
 	LEFT=3,
-	RIGHT=4,
-	FORWARD_IR=5,
-	BACKWARD_IR=6
+	RIGHT=4
 } TDirection;
 
 ////////////////////////////////////////////////////////
@@ -157,8 +155,8 @@ volatile TDirection dir = STOP;
 #define WHEEL_CIRC 20.4
 
 // LEFT and RIGHT wheel PWM DIFFERENCE
-#define MOTOR_CONST_LEFT 0 
-#define MOTOR_CONST_RIGHT 3
+#define WHEEL_DIFF_FOR 0 
+#define WHEEL_DIFF_BAC 0
 
 // Motor control pins. You need to adjust these till
 // Vincent moves in the correct direction
@@ -178,6 +176,9 @@ volatile TDirection dir = STOP;
 // Magnetometer
 #define DEG_PER_RAD (180.0/3.14159265358979)
 #define MAG_address 0x0E
+
+#define MOTOR_CONST_LEFT 0 
+#define MOTOR_CONST_RIGHT 3
 
 // Vincent's diagonal. We compute and store this once
 // since it is expensive to compute and really doesn't change
@@ -292,15 +293,12 @@ void startMotors();
 
 int pwmVal(float speed);
 void forward(float dist, float speed);
-void forwardIR(float dist, float speed);
 void reverse(float dist, float speed);
-void reverseIR(float dist, float speed);
 unsigned long computeDeltaTicks(float ang);
 void left(float ang, float speed);
 void right(float ang, float speed);
 void adjustLeft(float increment);
 void adjustRight(float increment);
-void normalizeSpeed();
 void stop();
 
 // Handle the statistics
@@ -369,6 +367,10 @@ void setup() {
 
 }
 
+void normalizeSpeed() {
+	motors.setSpeeds(currentLeftSpeed, currentRightSpeed);
+}
+
 /*
  *
  * Continuous loop
@@ -376,51 +378,20 @@ void setup() {
  */
 void loop() {
 
-	// TWO DIFFERENT MODES OF MOVEMENT
-	// IR MODE
-	//		The IR mode function during forward/reverse movement.
-	//		The primary function is to correct the path of Vincent
-	//		such that Vincent moves is a relatively straight path
-	// NON IR MODE
-	//		The non IR mode functions as per normal movements without
-	//		path correction
 	
 	// Check when Vincent can stop moving forward/backward after
 	// it is given a fixed distance to move forward/backward
-	// Additionally, if the forward/reverse command is given in IR mode,
-	// path correction is enabled
 	if (deltaDist > 0) {
-		// Check when to stop after given distance
-		if (forwardDist >= newDist) {
-			deltaDist = 0;
-			newDist = 0;
-			stop();
-			sendMessage("trying to stop!");
-		}
 		if (dir == FORWARD) {
-			/*
 			// Check when to stop after given distance
-			if (forwardDist >= newDist) {
+			if (forwardDist > newDist) {
 				deltaDist = 0;
 				newDist = 0;
 				stop();
 			}
-			*/
-		}
-		else if (dir == FORWARD_IR) {
-			/*
-		if (dir == FORWARD) {
-			// Check when to stop after given distance
-			if (forwardDist >= newDist) {
-				deltaDist = 0;
-				newDist = 0;
-				stop();
-				sendMessage("trying to stop!");
-			}
-			*/
 			
 			// check right and left obstacles
-			if (hasLeftObstacle() && !hasRightObstacle()) {
+			/*if (hasLeftObstacle() && !hasRightObstacle()) {
 				adjustRight(NEED_ADJUST_RIGHT);
 				sendMessage("adjusting right!");
 			}
@@ -434,36 +405,20 @@ void loop() {
 				normalizeSpeed();				
 				sendMessage("normalizing!");
 			}
+			*/
 		}
 		else if (dir == BACKWARD) {
-			if (reverseDist >= newDist) {
-				deltaDist = 0;
-				newDist = 0;
-				stop();
-			}
-		}
-		else if (dir == BACKWARD_IR) {
-			// Check when to stop after given distance
-			if (forwardDist >= newDist) {
+			if (reverseDist > newDist) {
 				deltaDist = 0;
 				newDist = 0;
 				stop();
 			}
 			
 			// check right and left obstacles
-			if (hasLeftObstacle() && !hasRightObstacle()) {
+			if (hasLeftObstacle()) {
 				adjustRight(NEED_ADJUST_RIGHT);
-				sendMessage("adjusting right!");
-			}
-
-			else if (hasRightObstacle() && !hasLeftObstacle()) {
+			} else if (hasRightObstacle()) {
 				adjustLeft(NEED_ADJUST_LEFT);
-				sendMessage("adjusting left!");
-			}
-			
-			else if (!hasLeftObstacle() && !hasRightObstacle()) {
-				normalizeSpeed();				
-				sendMessage("normalizing!");
 			}
 		}
 		else if (dir == STOP) {
@@ -499,7 +454,7 @@ void loop() {
 			stop();
 		}
 	}*/
-/*
+
 	 // Turning with magnetometer measurement
 	 if (turn) {
 		if (dir == LEFT || dir == RIGHT) {
@@ -525,33 +480,7 @@ void loop() {
 		turn = false;
 		stop(); 
 	}
-	*/
-  
-	// Turning with magnetometer measurement
-	if (turn) {
-		if (dir == LEFT || dir == RIGHT) {
-			while(1) {
-				int upBound = destBearing + 3;
-				int lowBound = destBearing - 3;
 
-				if (upBound > 360) upBound -= 360.0;
-				if (lowBound < 0) lowBound += 360.0;
-
-				if (getBearing() <= upBound && getBearing() >= lowBound) break;
-			}
-		  
-			curBearing = destBearing = 0;
-			turn = false;
-			stop(); 
-		}
-		else if (dir == STOP) {
-			curBearing = destBearing = 0;
-			turn = false;
-			stop();
-		}
-	}
-  
-  
 	// Retrieve packets from RasPi and handle them
 	TPacket recvPacket; // This holds commands from the Pi
 	TResult result = readPacket(&recvPacket);
@@ -773,69 +702,56 @@ void handleCommand(TPacket *command)
 			sendOK();
 			forward((float) command->params[0], (float) command->params[1]);
 			break;
-		
-		case COMMAND_FORWARD_IR:
-			sendOK();
-			forwardIR((float) command->params[0], (float) command->params[1]);
-			break;
-			
 		case COMMAND_REVERSE:
 			sendOK();
 			reverse((float) command->params[0], (float) command->params[1]);
 			break;
-		
-		case COMMAND_REVERSE_IR:
-			sendOK();
-			reverseIR((float) command->params[0], (float) command->params[1]);
-			break;
-			
 		case COMMAND_TURN_LEFT:
 			sendOK();
 			//left((float) command->params[0], (float) command->params[1]);
 			leftMAG((float) command->params[0], (float) command->params[1]);
 			break;
-			
 		case COMMAND_TURN_RIGHT:
 			sendOK();
 			//right((float) command->params[0], (float) command->params[1]);
 			rightMAG((float) command->params[0], (float) command->params[1]);
 			break;
-			
+		/*case COMMAND_ADJUST_LEFT:
+			sendOK();
+			adjustLeft((float) command->params[0]);
+			break;
+		case COMMAND_ADJUST_RIGHT:
+			sendOK();
+			adjustRight((float) command->params[0]);
+			break;*/
 		case COMMAND_STOP:
 			sendOK();
 			stop();
 			break;
-			
 		case COMMAND_GET_STATS:
 			sendStatus();
 			sendReady();
 			break;
-			
 		case COMMAND_CLEAR_STATS:
 			sendOK();
 			clearOneCounter(command->params[0]);
 			sendReady();
 			break;
-			
 		case COMMAND_AUTO_MODE:
 			isAuto = true;
 			sendOKAuto();
 			sendReady();
 			break;
-			
 		case COMMAND_REMOTE_MODE:
 			isAuto = false;
 			sendOK();
-			sendReady();
 			break;
-			
 		case COMMAND_GET_HEADING:
 			sendOK();
 			getHeading();
 			sendHeading();
 			sendReady();
 			break;
-			
 		default:
 			sendBadCommand();
 	}
@@ -922,16 +838,16 @@ void enablePullups()
 // Functions to be called by INT0 and INT1 ISRs.
 void leftISR()
 { 
-	if (dir == FORWARD || dir == FORWARD_IR) {
+	if (dir == FORWARD) {
 		leftForwardTicks++;
 		forwardDist = (unsigned long) ((float) leftForwardTicks / COUNTS_PER_REV * WHEEL_CIRC);
 	}
-	else if (dir == BACKWARD || dir == BACKWARD_IR) {
+	else if (dir == BACKWARD) {
 		leftReverseTicks++;
 		reverseDist = (unsigned long) ((float) leftReverseTicks / COUNTS_PER_REV * WHEEL_CIRC);
 	}
 	else if (dir == RIGHT) {
-		rightReverseTicksTurns++;
+		//rightReverseTicksTurns++;
 		leftForwardTicksTurns++;
 	}
 	//sendMessage("left\n");
@@ -941,14 +857,14 @@ void leftISR()
 
 void rightISR()
 {
-	if (dir == FORWARD || dir == FORWARD_IR) {
+	if (dir == FORWARD) {
 		rightForwardTicks++;
 		forwardDist = (unsigned long) ((float) rightForwardTicks / COUNTS_PER_REV * WHEEL_CIRC);
-	} else if (dir == BACKWARD || dir == BACKWARD_IR) {
+	} else if (dir == BACKWARD) {
 		rightReverseTicks++;
 		reverseDist = (unsigned long) ((float) rightReverseTicks / COUNTS_PER_REV * WHEEL_CIRC);
 	} else if (dir == LEFT) {
-		leftReverseTicksTurns++;
+		//rightReverseTicksTurns++;
 		rightForwardTicksTurns++;
 	}  
 
@@ -1099,93 +1015,97 @@ int pwmVal(float speed)
 }
 
 // Move Vincent forward "dist" cm at speed "speed".
-// 0 <= speed <= 400
+// "speed" is expressed as a percentage. E.g. 50 is
+// move forward at half speed.
 // Specifying a distance of 0 means Vincent will
 // continue moving forward indefinitely.
-void forward(float dist, float speed) {
+void forward(float dist, float speed) 
+{
 	// Set the direction of travel
 	dir = FORWARD;
 
-	// Compute the new total distance given the input
-	if (dist > 0) deltaDist = dist;
-	else deltaDist = 9999999;
-	newDist = forwardDist + deltaDist;
-
 	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
-
-	// Set motors speed
-	motors.setSpeeds(currentLeftSpeed, currentRightSpeed);
+	currentLeftSpeed = speed;
+	currentRightSpeed = speed;
 
 	// it is now moving
 	sendMoveOK();
-}
 
-// Same forward function but with IR path correction
-void forwardIR(float dist, float speed) {
-	// Set the direction of travel
-	dir = FORWARD_IR;
+	//int leftVal = pwmVal(speed);
+	//int rightVal = leftVal + WHEEL_DIFF_FOR;
 
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
 	else deltaDist = 9999999;
+	
 	newDist = forwardDist + deltaDist;
 
-	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
+	// LF = Left forward pin, LR = Left reverse pin
+	// RF = Right forward pin, RR = Right reverse pin
+	// This will be replaced later with bare-metal code.
 	
-	// Set motors speed
-	motors.setSpeeds(currentLeftSpeed, currentRightSpeed);
+	/*
+	analogWrite(LF, leftVal);
+	analogWrite(RF, rightVal);
+	analogWrite(LR,0, 0);*/
 	
-	// it is now moving
-	sendMoveOK();
+	motors.setSpeeds(speed - MOTOR_CONST_LEFT, speed - MOTOR_CONST_RIGHT);
+	//motors.setSpeeds(speed - MOTOR_CONST_LEFT, speed - MOTOR_CONST_RIGHT);
 }
 
 // Reverse Vincent "dist" cm at speed "speed".
-// 0 <= speed <= 400
+// "speed" is expressed as a percentage. E.g. 50 is
+// reverse at half speed.
 // Specifying a distance of 0 means Vincent will
 // continue reversing indefinitely.
-void reverse(float dist, float speed) {
+void reverse(float dist, float speed)
+{
 	// Set the direction of travel
 	dir = BACKWARD;
 
+	// Set current speed
+	currentRightSpeed = speed;
+	currentLeftSpeed = speed;
+	
+	// it is now moving
+	sendMoveOK();
+	
+	
+	//int rightVal = pwmVal(speed);
+	//int leftVal = rightVal - WHEEL_DIFF_BAC;
+	
+	
+	//int leftVal = pwmVal(speed);
+	//int rightVal = leftVal + WHEEL_DIFF_BAC;
+
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
 	else deltaDist = 9999999;
 	newDist = reverseDist + deltaDist;
 
-	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
+	//setSpeeds(-speed + MOTOR_CONST_LEFT, -speed + MOTOR_CONST_RIGHT);
+	motors.setSpeeds(-speed + MOTOR_CONST_LEFT, -speed + MOTOR_CONST_RIGHT);
 	
-	// Set motors speed
-	motors.setSpeeds(-currentLeftSpeed, -currentRightSpeed);
 	
-	// it is now moving
-	sendMoveOK();
+	// LF = Left forward pin, LR = Left reverse pin
+	// RF = Right forward pin, RR = Right reverse pin
+	// This will be replaced later with bare-metal code.
+	
+	/*analogWrite(LR, leftVal);
+	analogWrite(RR, leftVal);
+	analogWrite(LF, 0);
+	analogWrite(RF, 0);
+	*/
+	
 }
 
-// Same reverse function but with IR path correction
-void reverseIR(float dist, float speed) {
-	// Set the direction of travel
-	dir = BACKWARD_IR;
+// Function to estimate number of wheel ticks needed
+// to turn an angle
+unsigned long computeDeltaTicks(float ang) {
+	unsigned long ticks = (unsigned long) ((ang * 
+				vincentCirc * COUNTS_PER_REV) / (360.0 * WHEEL_CIRC));
 
-	// Compute the new total distance given the input
-	if (dist > 0) deltaDist = dist;
-	else deltaDist = 9999999;
-	newDist = reverseDist + deltaDist;
-
-	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
-	
-	// Set motors speed
-	motors.setSpeeds(-currentLeftSpeed, -currentRightSpeed);
-	
-	// it is now moving
-	sendMoveOK();
+	return ticks;
 }
 
 // Turn Vincent left "ang" degrees at speed "speed".
@@ -1198,20 +1118,34 @@ void left(float ang, float speed)
 	// Set the direction of travel
 	dir = LEFT;
 
+	/*
+	 * int rightVal = pwmVal(speed);
+	 int leftVal = rightVal - WHEEL_DIFF_FOR;
+	 * 
+	 */
+
+	//int leftVal = pwmVal(speed);
+	//int rightVal = leftVal + WHEEL_DIFF_FOR;  
+
+	// it is now moving
+	sendMoveOK();
+
 	// Compute the new total ticks needed to left turn
 	if(ang == 0) deltaTicks=99999999; 
 	else deltaTicks=computeDeltaTicks(ang); 
 	targetTicks = rightForwardTicksTurns + deltaTicks;
+
+	// To turn left we reverse the left wheel and move
+	// the right wheel forward.
+	//analogWrite(LR, 0);
+	//analogWrite(RF, rightVal);
+	//analogWrite(LF, 0);
+	//analogWrite(RR, 0);
 	
-	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
-	
-	// Set motors speed
-	motors.setSpeeds(-currentLeftSpeed, currentRightSpeed);
-	
-	// it is now moving
-	sendMoveOK();
+	// left motor does nothing, right motor moves
+	//setSpeeds(0, speed);
+	motors.setSpeeds(-speed, speed);  // spot turn
+	//motors.setSpeeds(0, speed);
 }
 
 // Turn Vincent right "ang" degrees at speed "speed".
@@ -1224,55 +1158,53 @@ void right(float ang, float speed)
 	// Set the direction of travel
 	dir = RIGHT;
 
+	//int leftVal = pwmVal(speed);
+	//int rightVal = leftVal + WHEEL_DIFF_FOR;
+
+	// it is now moving
+	sendMoveOK();
+
 	// Compute the new total ticks needed to right turn
 	if(ang == 0) deltaTicks=99999999; 
 	else deltaTicks=computeDeltaTicks(ang); 
 	targetTicks = leftForwardTicksTurns + deltaTicks;
 
-	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
-
-	// Set motors speed
-	motors.setSpeeds(currentLeftSpeed, -currentRightSpeed);
+	// To turn right we reverse the right wheel and move
+	// the left wheel forward.
+	//analogWrite(RR, 0);
+	//analogWrite(LF, leftVal);
+	//analogWrite(LR, 0);
+	//analogWrite(RF, 0);
 	
-	// it is now moving
-	sendMoveOK();
-}
-
-// Function to estimate number of wheel ticks needed
-// to turn an angle
-unsigned long computeDeltaTicks(float ang) {
-	unsigned long ticks = (unsigned long) ((ang * 
-				vincentCirc * COUNTS_PER_REV) / (360.0 * WHEEL_CIRC));
-
-	return ticks;
+	//setSpeeds(speed, 0);
+	//motors.setSpeeds(speed, 0); spot turn
+	motors.setSpeeds(speed, -speed);
 }
 
 void leftMAG (float ang, float speed) {
-	// Set the direction of travel
-	dir = LEFT;
-	turn = true;
+  // Set the direction of travel
+  dir = LEFT;
+  turn = true;
 
-	sendMoveOK();
-	curBearing = getBearing();
-	destBearing = curBearing - ang;
-	if (destBearing < 0) destBearing += 360;
+  sendMoveOK();
+  curBearing = getBearing();
+  destBearing = curBearing - ang;
+  if (destBearing < 0) destBearing += 360;
 
-	motors.setSpeeds(-speed, speed);
+  motors.setSpeeds(0, speed);
 }
 
 void rightMAG (float ang, float speed) {
-	// Set the direction of travel
-	dir = RIGHT;
-	turn = true;
+  // Set the direction of travel
+  dir = RIGHT;
+  turn = true;
 
-	sendMoveOK();
-	curBearing = getBearing();
-	destBearing = curBearing + ang;
-	if (destBearing > 360) destBearing -= 360;
+  sendMoveOK();
+  curBearing = getBearing();
+  destBearing = curBearing + ang;
+  if (destBearing > 360) destBearing -= 360;
 
-	motors.setSpeeds(speed, -speed);
+  motors.setSpeeds(speed, -speed);
 }
 
 
@@ -1280,7 +1212,10 @@ void rightMAG (float ang, float speed) {
 // TODO: Figure out the way to compute the degree of adjustment
 void adjustLeft(float increment) 
 {	
+	// Adjust the motors speed
 	motors.setSpeeds(currentLeftSpeed, currentRightSpeed + increment);
+	
+	//currentRightSpeed += increment;
 }
 
 // Adjust Vincent right given degree of adjust
@@ -1289,19 +1224,15 @@ void adjustRight(float increment)
 {
 	// Adjust the motors speed
 	motors.setSpeeds(currentLeftSpeed + increment, currentRightSpeed);
-}
-
-// After adjusting the left and right motors for path correction,
-// normalize both motors' speed to the original input
-void normalizeSpeed() {
-	motors.setSpeeds(currentLeftSpeed, currentRightSpeed);
+	
+	//currentLeftSpeed += increment;
 }
 
 // Stop Vincent. To replace with bare-metal code later.
 void stop()
 {
 	dir = STOP;
-	
+	turn = false;
 	//setSpeeds(0, 0);
 	motors.setSpeeds(0,0);
 
@@ -1319,11 +1250,10 @@ void stop()
  * Vincent's setup and run codes
  * 
  */
+int x, y, z;
+static int xmax = -1024, xmin = 1024, ymax = -1024, ymin = 1024, zmax = -1024, zmin = 1024;
 
 void MAG(int* xR, int* yR, int* zR) {
-  int x, y, z;
-  static int xmax = -1024, xmin = 1024, ymax = -1024, ymin = 1024, zmax = -1024, zmin = 1024;
-  
   Wire.beginTransmission(MAG_address);
   Wire.write((byte)0x01);
   Wire.endTransmission();
