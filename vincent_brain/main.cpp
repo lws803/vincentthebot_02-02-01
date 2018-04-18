@@ -20,9 +20,6 @@ using namespace std;
 #define BAUD_RATE					B9600
 
 // Defined constants to indicate directions, distance and speed
-#define DEFAULT_SPEED				200 // Default move/turn speed
-#define DEFAULT_LEFT_TURN_SPEED		205 // Default left turn speed
-#define DEFAULT_RIGHT_TURN_SPEED	205 // Default right turn speed
 #define GRID_UNIT_DISTANCE			20 // Assume grid unit distance to be wheel circumference
 // Defined constants for movement command type
 #define MOVE_COMMAND 				0 // For forward/backward
@@ -39,12 +36,12 @@ using namespace std;
 // LIDAR raw data to commands Pair
 // arg 1: Turn command (arg1: direction, arg2: angle)
 // arg 2: Forward/backward command (arg1: direction, arg2: distance)
-typedef pair< pair<string, float> , pair<string, float> > rawDataCommandPair;
+typedef pair< pair<string, int> , pair<string, int> > rawDataCommandPair;
 // Execution command tuple
 // arg 1: Command type --> TURN or MOVE
 // arg 2: Direction
 // arg 3: Angle/Distance
-typedef tuple<int, string, float> commandTuple;
+typedef tuple<int, string, int> commandTuple;
 // Checkpoint markers
 // arg 1: Checkpoint index position
 // arg 2: y - coordinate
@@ -66,12 +63,15 @@ volatile bool canPrint = true;
 // Keep track of autonomous mode routine
 volatile bool AUTONOMOUS_FLAG = false;
 volatile bool AUTO_RECEIVE_OK = false;
-float currentHeading = 0;
-float nextHeading = 0;
+int currentHeading = 0;
+int nextHeading = 0;
 int gridSteps = 0;
 // Backtracking variables
 deque<commandTuple> backStack;
 vector<checkpointTuple> checkpointList;
+int DEFAULT_SPEED = 110; // Default move/turn speed
+int DEFAULT_LEFT_TURN_SPEED	= 110; // Default left turn speed
+int DEFAULT_RIGHT_TURN_SPEED = 110; // Default right turn speed
 // Output file for real time reading
 //ofstream outputFile;
 // Backup file to store command stack
@@ -91,12 +91,12 @@ void handlePacket(TPacket *packet);
 void sendPacket(TPacket *packet);
 void *receiveThread(void *p);
 // Process MANUAL commands
-void printInstructions(float *currHead, float *nextHead, int *steps, rawDataCommandPair *pair);
+void printInstructions(int *currHead, int *nextHead, int *steps, rawDataCommandPair *pair);
 void printCommandList();
 commandTuple executeUserCommand();
 void flushInput();
-float getParams(TPacket *commandPacket);
-float sendCommand(char command);
+int getParams(TPacket *commandPacket);
+int sendCommand(char command);
 void invertCommand(commandTuple *tup);
 void pushCmdToStack(commandTuple *tup);
 void pushNewCmdToStack();
@@ -106,8 +106,8 @@ void printCmdStack();
 void processCommand(commandTuple cmdTup);
 void setEndPoint(TPacket *commandPacket);
 // Process raw data from LIDAR
-rawDataCommandPair processRawData(float currentHeading, 
-	float nextHeading, int gridSteps);
+rawDataCommandPair processRawData(int currentHeading, 
+	int nextHeading, int gridSteps);
 
 // Debugging function
 void printCmd(commandTuple &tup) {
@@ -125,7 +125,7 @@ void printCmd(commandTuple &tup) {
 		printf("Right\n");
 	}
 
-	printf("Value: %0.2f\n\n", get<2>(tup));
+	printf("Value: %d\n\n", get<2>(tup));
 }
 
 /*
@@ -443,7 +443,8 @@ void handlePacket(TPacket *packet)
 }
 
 void sendPacket(TPacket *packet)
-{
+{	
+	printf("Sending packet now..\n");
 	char buffer[PACKET_SIZE];
 	int len = serialize(buffer, packet, sizeof(TPacket));
 
@@ -483,10 +484,10 @@ void *receiveThread(void *p)
 
 // This prints the current positional state of Vincent and the required
 // commands for next movement
-void printInstructions(float *currHead, float *nextHead, int *steps, rawDataCommandPair *pair) {
+void printInstructions(int *currHead, int *nextHead, int *steps, rawDataCommandPair *pair) {
 	printf("****************************************\n");
-	printf("Current Heading		: %f\n", *currHead);
-	printf("Next Heading		: %f\n", *nextHead);
+	printf("Current Heading		: %d\n", *currHead);
+	printf("Next Heading		: %d\n", *nextHead);
 	printf("Grid steps required	: %d\n", *steps);
 	printf("****************************************\n");
 	printf("Movement commands required:\n");
@@ -495,12 +496,12 @@ void printInstructions(float *currHead, float *nextHead, int *steps, rawDataComm
 		if ((pair->first).first == "r") printf("TURN RIGHT by ");
 		else printf("TURN LEFT by ");
 		
-		printf("%0.2f degree\n", (pair->first).second);
+		printf("%d degree\n", (pair->first).second);
 	}
 	
 	if ((pair->second).first == "f") printf("FORWARD by ");
 	else printf("BACKWARD by ");
-	printf("%0.2f CM\n", (pair->second).second);
+	printf("%d CM\n", (pair->second).second);
 	printf("****************************************\n\n");
 }
 
@@ -529,7 +530,7 @@ void printCommandList() {
 commandTuple executeUserCommand() {	
 	commandTuple cmdTup;			
 	char ch;
-	float value = 0;
+	int value = 0;
 	
 	// Request user for command
 	printf("Input: ");
@@ -581,7 +582,7 @@ void flushInput()
 	while((c = getchar()) != '\n' && c != EOF);
 }
 
-float getParams(TPacket *commandPacket)
+int getParams(TPacket *commandPacket)
 {
 	int value, power;
 	printf("Enter distance/angle in cm/degrees (e.g. 50) and power in %% (e.g. 75) separated by space.\n");
@@ -600,14 +601,14 @@ float getParams(TPacket *commandPacket)
 	commandPacket->params[1] = power;
 	commandPacket->params[0] = value;
 	
-	return (float)value;
+	return value;
 }
 
-float sendCommand(char command) {
+int sendCommand(char command) {
 	TPacket commandPacket;
 	commandPacket.packetType = PACKET_TYPE_COMMAND;
 
-	float value = 0;
+	int value = 0;
 
 	switch(command)
 	{
@@ -709,7 +710,7 @@ float sendCommand(char command) {
 			printf("To stop any time, input 's'\n");
 			commandPacket.command = COMMAND_AUTO_MODE;
 			sendPacket(&commandPacket);
-			sleep(2);  // Wait a little while..
+			sleep(1);  // Wait a little while..
 			break;
 
 		case 'p':
@@ -765,7 +766,7 @@ void pushCmdToStack(commandTuple *tup) {
 void pushNewCmdToStack() {
 	commandTuple tup;
 	char ch;
-	float value;
+	int value;
 	
 	printf("Give a direction (f,b,l,r): ");
 	scanf("%c", &ch);
@@ -774,7 +775,7 @@ void pushNewCmdToStack() {
 	
 	printf("Give a value (distance for forward/backward, turn degree for left/right): ");
 	printf("TO UNDO: Input negative for any of the values.\n");
-	scanf("%f", &value);
+	scanf("%d", &value);
 	flushInput();
 	
 	// Undo option
@@ -798,7 +799,7 @@ void pushNewCmdToStack() {
 }
 
 void pushCmdToFile(commandTuple *tup) {
-	float value;
+	int value;
 	
 	// Write the direction
 	if (get<1>(*tup) == "l" || get<1>(*tup) == "L")
@@ -837,19 +838,19 @@ void printCmdStack() {
 	if (backStack.empty()) printf("\t\tSTACK IS EMPTY!\n");
 	for (auto it = backStack.rbegin(); it != backStack.rend(); it++) {
 		if (get<1>(*it) == "f") {
-			printf("FORWARD - - -|| - - - %0.2f CM\n", get<2>(*it));
+			printf("FORWARD - - -|| - - - %d CM\n", get<2>(*it));
 		}
 		else if (get<1>(*it) == "j") {
-			printf("FORWARD IR - || - - - %0.2f CM\n", get<2>(*it));
+			printf("FORWARD IR - || - - - %d CM\n", get<2>(*it));
 		}
 		else if (get<1>(*it) == "b") {
-			printf("BACKWARD - - || - - - %0.2f CM\n", get<2>(*it));
+			printf("BACKWARD - - || - - - %d CM\n", get<2>(*it));
 		}
 		else if (get<1>(*it) == "l") {
-			printf("LEFT - - - - || - - - %0.2f DEGREE\n", get<2>(*it));
+			printf("LEFT - - - - || - - - %d DEGREE\n", get<2>(*it));
 		}
 		else {
-			printf("RIGHT - - - -|| - - - %0.2f DEGREE\n", get<2>(*it));
+			printf("RIGHT - - - -|| - - - %d DEGREE\n", get<2>(*it));
 		}
 	}
 	
@@ -916,7 +917,8 @@ void processCommand(commandTuple cmdTup) {
 	}
 	
 	// Set the distance/angle value in command
-	commandPacket.params[0] = get<2>(cmdTup);
+	int value = get<2>(cmdTup);
+	commandPacket.params[0] = value;
 	
 	// Send the command to Arduino
 	sendPacket(&commandPacket);
@@ -970,20 +972,20 @@ void setEndPoint(TPacket *commandPacket) {
  * Thus, we either return 1 or 2 movement commands. We wrap them in the
  * defined rawDataCommandPair
  */
-rawDataCommandPair processRawData(float currentHeading, 
-	float nextHeading, int gridSteps) {
+rawDataCommandPair processRawData(int currentHeading, 
+	int nextHeading, int gridSteps) {
 	// Raw data to command pair
 	rawDataCommandPair cmdPair;
 		
 	// First, Vincent determines the movement distance
-	float moveDistance = 0;
+	int moveDistance = 0;
 	if (gridSteps > 0) {
-		 moveDistance = (float)gridSteps * GRID_UNIT_DISTANCE; 
+		 moveDistance = (int)gridSteps * GRID_UNIT_DISTANCE; 
 	}
 	
 	// Next, Vincent needs to determine the direction of based on the
 	// given heading
-	float turnAngle = nextHeading-currentHeading;
+	int turnAngle = nextHeading-currentHeading;
 	string direction;
 	
 	// We can use -180 < x <= 180 (degrees) 

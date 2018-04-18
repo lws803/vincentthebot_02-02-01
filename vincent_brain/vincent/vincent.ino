@@ -229,14 +229,14 @@ unsigned long deltaTicks;
 unsigned long targetTicks;
 
 // Variables to keep track of current speed
-float currentLeftSpeed;
-float currentRightSpeed;
-float speedConstant;
+int currentLeftSpeed;
+int currentRightSpeed;
+int speedConstant;
 
 // Variable to store bearings
-float heading;
-float curBearing;
-float destBearing;
+int heading;
+int curBearing;
+int destBearing;
 
 // Variables to track autonomous states
 volatile bool AUTONOMOUS_FLAG = false  ;
@@ -294,15 +294,15 @@ void startMotors();
  */
 
 int pwmVal(float speed);
-void forward(float dist, float speed);
-void forwardIR(float dist, float speed);
-void reverse(float dist, float speed);
-void reverseIR(float dist, float speed);
-unsigned long computeDeltaTicks(float ang);
-void left(float ang, float speed);
-void right(float ang, float speed);
-void adjustLeft(float increment);
-void adjustRight(float increment);
+void forward(int dist, int speed);
+void forwardIR(int dist, int speed);
+void reverse(int dist, int speed);
+void reverseIR(int dist, int speed);
+unsigned long computeDeltaTicks(int ang);
+void left(int ang, int speed);
+void right(int ang, int speed);
+void adjustLeft(int increment);
+void adjustRight(int increment);
 void stop();
 
 // Handle the statistics
@@ -381,7 +381,27 @@ void normalizeSpeed() {
  *
  */
 void loop() {
+	if (Serial.available() > 0) {
+	// Retrieve packets from RasPi and handle them
+	TPacket recvPacket; // This holds commands from the Pi
+	TResult result = readPacket(&recvPacket);
 
+	if(result == PACKET_OK) {
+		handlePacket(&recvPacket);
+	} else {
+		if(result == PACKET_BAD) 
+		{
+			sendBadPacket();
+			handlePacket(&recvPacket);
+		}
+		else {
+			if(result == PACKET_CHECKSUM_BAD) {
+				sendBadChecksum();
+				handlePacket(&recvPacket);
+			}
+		}
+	}
+	}
 	
 	// Check when Vincent can stop moving forward/backward after
 	// it is given a fixed distance to move forward/backward
@@ -399,17 +419,14 @@ void loop() {
 			// check right and left obstacles
 			if (hasLeftObstacle() && !hasRightObstacle()) {
 				adjustRight(NEED_ADJUST_RIGHT);
-				sendMessage("adjusting right!");
 			}
 
 			else if (hasRightObstacle() && !hasLeftObstacle()) {
 				adjustLeft(NEED_ADJUST_LEFT);
-				sendMessage("adjusting left!");
 			}
 			
 			else if (!hasLeftObstacle() && !hasRightObstacle()) {
 				normalizeSpeed();				
-				sendMessage("normalizing!");
 			}
 			
 			// Check when to stop after given distance
@@ -417,9 +434,7 @@ void loop() {
 				deltaDist = 0;
 				newDist = 0;
 				stop();
-				sendMessage("ir and stopping\n");
-			}
-			
+			}	
 		}
 		else if (dir == BACKWARD) {
 			if (reverseDist > newDist) {
@@ -442,8 +457,6 @@ void loop() {
 			stop();
 		}
 	}
-	
-	
 	
 	/*
 	// Check when Vincent can stop turning left/right after
@@ -468,8 +481,8 @@ void loop() {
 			targetTicks = 0;
 			stop();
 		}
-	}*/
-
+	}
+	*/
 	// Turning with magnetometer measurement
 	if (turn) {
 		if (dir == LEFT || dir == RIGHT) {
@@ -493,57 +506,7 @@ void loop() {
 			stop();
 		}
 	}
-
-	// Retrieve packets from RasPi and handle them
-	TPacket recvPacket; // This holds commands from the Pi
-	TResult result = readPacket(&recvPacket);
-
-	// Handle packets differently if autonomous or remote
-	// 
-	// TODO: Do we really need to handle packets this way during 
-	// autonomous mode? Is it needed?
-	/*
-	   if (isAuto) {
-	   if (result == PACKET_AUTO_OK) {
-	   handlePacket(&recvPacket);
-	   } else {
-	   if (result == PACKET_BAD) {
-	   sendBadPacket();
-	   } else {
-	   if (result == PACKET_CHECKSUM_BAD)
-	   sendBadChecksum();
-	   }
-	   }
-
-	   } else {
-	   if(result == PACKET_OK)
-	   handlePacket(&recvPacket);
-	   else
-	   if(result == PACKET_BAD)
-	   {
-	   sendBadPacket();
-	   }
-	   else
-	   if(result == PACKET_CHECKSUM_BAD)
-	   sendBadChecksum();
-	   }
-	 */
-
-	if(result == PACKET_OK) {
-		handlePacket(&recvPacket);
-	} else {
-		if(result == PACKET_BAD) 
-		{
-			sendBadPacket();
-			handlePacket(&recvPacket);
-		}
-		else {
-			if(result == PACKET_CHECKSUM_BAD) {
-				sendBadChecksum();
-				handlePacket(&recvPacket);
-			}
-		}
-	}
+	
 }
 
 /*
@@ -714,31 +677,34 @@ void handleCommand(TPacket *command)
 		// For turn left/right commands, param[0] = angle, param[1] = speed;
 		// For adjust left/right commands, param[0] = increment;
 		case COMMAND_FORWARD:
+			//sendMessage("going forward\n");
 			sendOK();
-			forward((float) command->params[0], (float) command->params[1]);
+			forward(command->params[0], command->params[1]);
 			break;
 		case COMMAND_FORWARD_IR:
+			//sendMessage("going forward with IR\n");
 			sendOK();
-			forwardIR((float) command->params[0], (float) command->params[1]);
+			forwardIR(command->params[0], command->params[1]);
 			break;
 		case COMMAND_REVERSE:
 			sendOK();
-			reverse((float) command->params[0], (float) command->params[1]);
+			reverse(command->params[0], command->params[1]);
 			break;
 		case COMMAND_REVERSE_IR:
 			sendOK();
-			reverseIR((float) command->params[0], (float) command->params[1]);
+			reverseIR(command->params[0], command->params[1]);
 			break;
 		case COMMAND_TURN_LEFT:
-			sendMessage("turning left\n");
+			//sendMessage("turning left\n");
 			sendOK();
-			//left((float) command->params[0], (float) command->params[1]);
-			leftMAG((float) command->params[0], (float) command->params[1]);
+			//left(command->params[0], command->params[1]);
+			leftMAG(command->params[0], command->params[1]);
 			break;
 		case COMMAND_TURN_RIGHT:
+			//sendMessage("turning right\n");
 			sendOK();
-			//right((float) command->params[0], (float) command->params[1]);
-			rightMAG((float) command->params[0], (float) command->params[1]);
+			//right(command->params[0], command->params[1]);
+			rightMAG(command->params[0], command->params[1]);
 			break;
 		/*case COMMAND_ADJUST_LEFT:
 			sendOK();
@@ -839,7 +805,6 @@ void handlePacket(TPacket *packet)
 			break;
 
 		case PACKET_TYPE_AUTO:
-			AUTONOMOUS_FLAG = true;
 			break;
 	}
 }
@@ -1043,7 +1008,7 @@ int pwmVal(float speed)
 // move forward at half speed.
 // Specifying a distance of 0 means Vincent will
 // continue moving forward indefinitely.
-void forward(float dist, float speed) 
+void forward(int dist, int speed) 
 {
 	// Set the direction of travel
 	dir = FORWARD;
@@ -1063,7 +1028,7 @@ void forward(float dist, float speed)
 	motors.setSpeeds(currentLeftSpeed, currentRightSpeed);
 }
 
-void forwardIR(float dist, float speed) 
+void forwardIR(int dist, int speed) 
 {
 	// Set the direction of travel
 	dir = FORWARD_IR;
@@ -1082,6 +1047,7 @@ void forwardIR(float dist, float speed)
 	newDist = forwardDist + deltaDist;
 	
 	motors.setSpeeds(currentLeftSpeed, currentRightSpeed);
+	
 }
 
 // Reverse Vincent "dist" cm at speed "speed".
@@ -1089,7 +1055,7 @@ void forwardIR(float dist, float speed)
 // reverse at half speed.
 // Specifying a distance of 0 means Vincent will
 // continue reversing indefinitely.
-void reverse(float dist, float speed)
+void reverse(int dist, int speed)
 {
 	sendMessage("going back\n");
 	// Set the direction of travel
@@ -1110,7 +1076,7 @@ void reverse(float dist, float speed)
 	motors.setSpeeds(-currentLeftSpeed, -currentRightSpeed);
 }
 
-void reverseIR(float dist, float speed)
+void reverseIR(int dist, int speed)
 {
 	sendMessage("going back\n");
 	// Set the direction of travel
@@ -1133,7 +1099,7 @@ void reverseIR(float dist, float speed)
 
 // Function to estimate number of wheel ticks needed
 // to turn an angle
-unsigned long computeDeltaTicks(float ang) {
+unsigned long computeDeltaTicks(int ang) {
 	unsigned long ticks = (unsigned long) ((ang * 
 				vincentCirc * COUNTS_PER_REV) / (360.0 * WHEEL_CIRC));
 
@@ -1145,7 +1111,7 @@ unsigned long computeDeltaTicks(float ang) {
 // turn left at half speed.
 // Specifying an angle of 0 degrees will cause Vincent to
 // turn left indefinitely.
-void left(float ang, float speed)
+void left(int ang, int speed)
 {
 	// Set the direction of travel
 	dir = LEFT;
@@ -1185,7 +1151,7 @@ void left(float ang, float speed)
 // turn left at half speed.
 // Specifying an angle of 0 degrees will cause Vincent to
 // turn right indefinitely.
-void right(float ang, float speed)
+void right(int ang, int speed)
 {
 	// Set the direction of travel
 	dir = RIGHT;
@@ -1213,7 +1179,7 @@ void right(float ang, float speed)
 	motors.setSpeeds(speed, -speed);
 }
 
-void leftMAG (float ang, float speed) {
+void leftMAG (int ang, int speed) {
   // Set the direction of travel
   dir = LEFT;
   turn = true;
@@ -1226,7 +1192,7 @@ void leftMAG (float ang, float speed) {
   motors.setSpeeds(-speed, speed);
 }
 
-void rightMAG (float ang, float speed) {
+void rightMAG (int ang, int speed) {
   // Set the direction of travel
   dir = RIGHT;
   turn = true;
@@ -1242,7 +1208,7 @@ void rightMAG (float ang, float speed) {
 
 // Adjust Vincent left given degree of adjust
 // TODO: Figure out the way to compute the degree of adjustment
-void adjustLeft(float increment) 
+void adjustLeft(int increment) 
 {	
 	// Adjust the motors speed
 	motors.setSpeeds(currentLeftSpeed, currentRightSpeed + increment);
@@ -1252,7 +1218,7 @@ void adjustLeft(float increment)
 
 // Adjust Vincent right given degree of adjust
 // TODO: Figure out the way to compute the degree of adjustment
-void adjustRight(float increment) 
+void adjustRight(int increment) 
 {
 	// Adjust the motors speed
 	motors.setSpeeds(currentLeftSpeed + increment, currentRightSpeed);
@@ -1270,7 +1236,9 @@ void stop()
 	
 	currentLeftSpeed = 0;
 	currentRightSpeed = 0;
-
+	
+	delay(500);
+	
 	sendStopOK();
 	sendReady();
 }
