@@ -150,6 +150,8 @@ volatile TDirection dir = STOP;
 // Number of ticks per revolution from the 
 // wheel encoder.
 #define COUNTS_PER_REV 140
+#define COUNTS_PER_REV_LEFT 195
+#define COUNTS_PER_REV_RIGHT 197
 
 // Wheel circumference in cm.
 // We will use this to calculate forward/backward distance traveled 
@@ -229,14 +231,14 @@ unsigned long deltaTicks;
 unsigned long targetTicks;
 
 // Variables to keep track of current speed
-int currentLeftSpeed;
-int currentRightSpeed;
-int speedConstant;
+float currentLeftSpeed;
+float currentRightSpeed;
+float speedConstant;
 
 // Variable to store bearings
-int heading;
-int curBearing;
-int destBearing;
+float heading;
+float curBearing;
+float destBearing;
 
 // Variables to track autonomous states
 volatile bool AUTONOMOUS_FLAG = false  ;
@@ -294,15 +296,13 @@ void startMotors();
  */
 
 int pwmVal(float speed);
-void forward(int dist, int speed);
-void forwardIR(int dist, int speed);
-void reverse(int dist, int speed);
-void reverseIR(int dist, int speed);
-unsigned long computeDeltaTicks(int ang);
-void left(int ang, int speed);
-void right(int ang, int speed);
-void adjustLeft(int increment);
-void adjustRight(int increment);
+void forward(float dist, float speed);
+void reverse(float dist, float speed);
+unsigned long computeDeltaTicks(float ang);
+void left(float ang, float speed);
+void right(float ang, float speed);
+void adjustLeft(float increment);
+void adjustRight(float increment);
 void stop();
 
 // Handle the statistics
@@ -381,27 +381,7 @@ void normalizeSpeed() {
  *
  */
 void loop() {
-	if (Serial.available() > 0) {
-	// Retrieve packets from RasPi and handle them
-	TPacket recvPacket; // This holds commands from the Pi
-	TResult result = readPacket(&recvPacket);
 
-	if(result == PACKET_OK) {
-		handlePacket(&recvPacket);
-	} else {
-		if(result == PACKET_BAD) 
-		{
-			sendBadPacket();
-			handlePacket(&recvPacket);
-		}
-		else {
-			if(result == PACKET_CHECKSUM_BAD) {
-				sendBadChecksum();
-				handlePacket(&recvPacket);
-			}
-		}
-	}
-	}
 	
 	// Check when Vincent can stop moving forward/backward after
 	// it is given a fixed distance to move forward/backward
@@ -458,6 +438,8 @@ void loop() {
 		}
 	}
 	
+	
+	
 	/*
 	// Check when Vincent can stop turning left/right after
 	// it is given a fixed angle to turn left/right
@@ -481,32 +463,82 @@ void loop() {
 			targetTicks = 0;
 			stop();
 		}
-	}
-	*/
-	// Turning with magnetometer measurement
-	if (turn) {
+	}*/
+
+	 // Turning with magnetometer measurement
+	 if (turn) {
 		if (dir == LEFT || dir == RIGHT) {
-			while(1) {
-				int upBound = destBearing + 3;
-				int lowBound = destBearing - 3;
+			int cur;
+			int upBound = destBearing + 3;
+			int lowBound = destBearing - 3;
+			if (upBound >= 360) upBound -= 360.0;
+			if (lowBound <= 0) lowBound += 360.0;
+			if (lowBound > upBound) {
+				while(1) {
+					cur = getBearing();
+					if (cur <= upBound || cur >= lowBound) break;
+				}
+			} else {
+				while(1) {
+					cur = getBearing();
+					if (cur <= upBound && cur >= lowBound) break;
+				}
+			}			
+		} 
+		
+		curBearing = destBearing = 0;
+		turn = false;
+		stop(); 
+	}
 
-				if (upBound > 360) upBound -= 360.0;
-				if (lowBound < 0) lowBound += 360.0;
+	// Retrieve packets from RasPi and handle them
+	TPacket recvPacket; // This holds commands from the Pi
+	TResult result = readPacket(&recvPacket);
 
-				if (getBearing() <= upBound && getBearing() >= lowBound) break;
-			}
-		  
-			curBearing = destBearing = 0;
-			turn = false;
-			stop(); 
+	// Handle packets differently if autonomous or remote
+	// 
+	// TODO: Do we really need to handle packets this way during 
+	// autonomous mode? Is it needed?
+	/*
+	   if (isAuto) {
+	   if (result == PACKET_AUTO_OK) {
+	   handlePacket(&recvPacket);
+	   } else {
+	   if (result == PACKET_BAD) {
+	   sendBadPacket();
+	   } else {
+	   if (result == PACKET_CHECKSUM_BAD)
+	   sendBadChecksum();
+	   }
+	   }
+
+	   } else {
+	   if(result == PACKET_OK)
+	   handlePacket(&recvPacket);
+	   else
+	   if(result == PACKET_BAD)
+	   {
+	   sendBadPacket();
+	   }
+	   else
+	   if(result == PACKET_CHECKSUM_BAD)
+	   sendBadChecksum();
+	   }
+	 */
+
+	if(result == PACKET_OK) {
+		handlePacket(&recvPacket);
+	} else {
+		if(result == PACKET_BAD) 
+		{
+			sendBadPacket();
 		}
-		else if (dir == STOP) {
-			curBearing = destBearing = 0;
-			turn = false;
-			stop();
+		else {
+			if(result == PACKET_CHECKSUM_BAD) {
+				sendBadChecksum();
+			}
 		}
 	}
-	
 }
 
 /*
@@ -677,34 +709,30 @@ void handleCommand(TPacket *command)
 		// For turn left/right commands, param[0] = angle, param[1] = speed;
 		// For adjust left/right commands, param[0] = increment;
 		case COMMAND_FORWARD:
-			//sendMessage("going forward\n");
 			sendOK();
-			forward(command->params[0], command->params[1]);
+			forward((float) command->params[0], (float) command->params[1]);
 			break;
 		case COMMAND_FORWARD_IR:
-			//sendMessage("going forward with IR\n");
 			sendOK();
 			forwardIR(command->params[0], command->params[1]);
 			break;
 		case COMMAND_REVERSE:
 			sendOK();
-			reverse(command->params[0], command->params[1]);
+			reverse((float) command->params[0], (float) command->params[1]);
 			break;
 		case COMMAND_REVERSE_IR:
 			sendOK();
 			reverseIR(command->params[0], command->params[1]);
-			break;
+			break;	
 		case COMMAND_TURN_LEFT:
-			//sendMessage("turning left\n");
 			sendOK();
-			//left(command->params[0], command->params[1]);
-			leftMAG(command->params[0], command->params[1]);
+			//left((float) command->params[0], (float) command->params[1]);
+			leftMAG((float) command->params[0], (float) command->params[1]);
 			break;
 		case COMMAND_TURN_RIGHT:
-			//sendMessage("turning right\n");
 			sendOK();
-			//right(command->params[0], command->params[1]);
-			rightMAG(command->params[0], command->params[1]);
+			//right((float) command->params[0], (float) command->params[1]);
+			rightMAG((float) command->params[0], (float) command->params[1]);
 			break;
 		/*case COMMAND_ADJUST_LEFT:
 			sendOK();
@@ -805,6 +833,7 @@ void handlePacket(TPacket *packet)
 			break;
 
 		case PACKET_TYPE_AUTO:
+			AUTONOMOUS_FLAG = true;
 			break;
 	}
 }
@@ -829,11 +858,11 @@ void leftISR()
 { 
 	if (dir == FORWARD || dir == FORWARD_IR) {
 		leftForwardTicks++;
-		forwardDist = (unsigned long) ((float) leftForwardTicks / COUNTS_PER_REV * WHEEL_CIRC);
+		forwardDist = (unsigned long) ((float) leftForwardTicks / COUNTS_PER_REV_LEFT * WHEEL_CIRC);
 	}
 	else if (dir == BACKWARD || dir == BACKWARD_IR) {
 		leftReverseTicks++;
-		reverseDist = (unsigned long) ((float) leftReverseTicks / COUNTS_PER_REV * WHEEL_CIRC);
+		reverseDist = (unsigned long) ((float) leftReverseTicks / COUNTS_PER_REV_LEFT * WHEEL_CIRC);
 	}
 	else if (dir == RIGHT) {
 		//rightReverseTicksTurns++;
@@ -848,10 +877,10 @@ void rightISR()
 {
 	if (dir == FORWARD || dir == FORWARD_IR) {
 		rightForwardTicks++;
-		forwardDist = (unsigned long) ((float) rightForwardTicks / COUNTS_PER_REV * WHEEL_CIRC);
+		forwardDist = (unsigned long) ((float) rightForwardTicks / COUNTS_PER_REV_RIGHT * WHEEL_CIRC);
 	} else if (dir == BACKWARD || dir == BACKWARD_IR) {
 		rightReverseTicks++;
-		reverseDist = (unsigned long) ((float) rightReverseTicks / COUNTS_PER_REV * WHEEL_CIRC);
+		reverseDist = (unsigned long) ((float) rightReverseTicks / COUNTS_PER_REV_RIGHT * WHEEL_CIRC);
 	} else if (dir == LEFT) {
 		//rightReverseTicksTurns++;
 		rightForwardTicksTurns++;
@@ -1008,24 +1037,38 @@ int pwmVal(float speed)
 // move forward at half speed.
 // Specifying a distance of 0 means Vincent will
 // continue moving forward indefinitely.
-void forward(int dist, int speed) 
+void forward(float dist, float speed) 
 {
 	// Set the direction of travel
 	dir = FORWARD;
 
 	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
+	currentLeftSpeed = speed;
+	currentRightSpeed = speed;
 
 	// it is now moving
 	sendMoveOK();
-	
+
+	//int leftVal = pwmVal(speed);
+	//int rightVal = leftVal + WHEEL_DIFF_FOR;
+
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
 	else deltaDist = 9999999;
-	newDist = forwardDist + deltaDist;
 	
-	motors.setSpeeds(currentLeftSpeed, currentRightSpeed);
+	newDist = forwardDist + deltaDist;
+
+	// LF = Left forward pin, LR = Left reverse pin
+	// RF = Right forward pin, RR = Right reverse pin
+	// This will be replaced later with bare-metal code.
+	
+	/*
+	analogWrite(LF, leftVal);
+	analogWrite(RF, rightVal);
+	analogWrite(LR,0, 0);*/
+	
+	motors.setSpeeds(speed - MOTOR_CONST_LEFT, speed - MOTOR_CONST_RIGHT);
+	//motors.setSpeeds(speed - MOTOR_CONST_LEFT, speed - MOTOR_CONST_RIGHT);
 }
 
 void forwardIR(int dist, int speed) 
@@ -1055,30 +1098,49 @@ void forwardIR(int dist, int speed)
 // reverse at half speed.
 // Specifying a distance of 0 means Vincent will
 // continue reversing indefinitely.
-void reverse(int dist, int speed)
+void reverse(float dist, float speed)
 {
-	sendMessage("going back\n");
 	// Set the direction of travel
 	dir = BACKWARD;
 
 	// Set current speed
-	currentLeftSpeed = speed - MOTOR_CONST_LEFT;
-	currentRightSpeed = speed - MOTOR_CONST_RIGHT;
+	currentRightSpeed = speed;
+	currentLeftSpeed = speed;
 	
 	// it is now moving
 	sendMoveOK();
+	
+	
+	//int rightVal = pwmVal(speed);
+	//int leftVal = rightVal - WHEEL_DIFF_BAC;
+	
+	
+	//int leftVal = pwmVal(speed);
+	//int rightVal = leftVal + WHEEL_DIFF_BAC;
 
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
 	else deltaDist = 9999999;
 	newDist = reverseDist + deltaDist;
 
-	motors.setSpeeds(-currentLeftSpeed, -currentRightSpeed);
+	//setSpeeds(-speed + MOTOR_CONST_LEFT, -speed + MOTOR_CONST_RIGHT);
+	motors.setSpeeds(-speed + MOTOR_CONST_LEFT, -speed + MOTOR_CONST_RIGHT);
+	
+	
+	// LF = Left forward pin, LR = Left reverse pin
+	// RF = Right forward pin, RR = Right reverse pin
+	// This will be replaced later with bare-metal code.
+	
+	/*analogWrite(LR, leftVal);
+	analogWrite(RR, leftVal);
+	analogWrite(LF, 0);
+	analogWrite(RF, 0);
+	*/
+	
 }
 
 void reverseIR(int dist, int speed)
 {
-	sendMessage("going back\n");
 	// Set the direction of travel
 	dir = BACKWARD_IR;
 
@@ -1099,9 +1161,15 @@ void reverseIR(int dist, int speed)
 
 // Function to estimate number of wheel ticks needed
 // to turn an angle
-unsigned long computeDeltaTicks(int ang) {
-	unsigned long ticks = (unsigned long) ((ang * 
-				vincentCirc * COUNTS_PER_REV) / (360.0 * WHEEL_CIRC));
+unsigned long computeDeltaTicks(float ang) {
+	if (dir == LEFT) {
+		unsigned long ticks = (unsigned long) ((ang * 
+				vincentCirc * COUNTS_PER_REV_LEFT) / (360.0 * WHEEL_CIRC));
+	}
+	else if (dir == RIGHT) {
+		unsigned long ticks = (unsigned long) ((ang * 
+				vincentCirc * COUNTS_PER_REV_RIGHT) / (360.0 * WHEEL_CIRC));
+
 
 	return ticks;
 }
@@ -1111,7 +1179,7 @@ unsigned long computeDeltaTicks(int ang) {
 // turn left at half speed.
 // Specifying an angle of 0 degrees will cause Vincent to
 // turn left indefinitely.
-void left(int ang, int speed)
+void left(float ang, float speed)
 {
 	// Set the direction of travel
 	dir = LEFT;
@@ -1151,7 +1219,7 @@ void left(int ang, int speed)
 // turn left at half speed.
 // Specifying an angle of 0 degrees will cause Vincent to
 // turn right indefinitely.
-void right(int ang, int speed)
+void right(float ang, float speed)
 {
 	// Set the direction of travel
 	dir = RIGHT;
@@ -1179,7 +1247,7 @@ void right(int ang, int speed)
 	motors.setSpeeds(speed, -speed);
 }
 
-void leftMAG (int ang, int speed) {
+void leftMAG (float ang, float speed) {
   // Set the direction of travel
   dir = LEFT;
   turn = true;
@@ -1188,11 +1256,11 @@ void leftMAG (int ang, int speed) {
   curBearing = getBearing();
   destBearing = curBearing - ang;
   if (destBearing < 0) destBearing += 360;
-  
-  motors.setSpeeds(-speed, speed);
+
+  motors.setSpeeds(0, speed);
 }
 
-void rightMAG (int ang, int speed) {
+void rightMAG (float ang, float speed) {
   // Set the direction of travel
   dir = RIGHT;
   turn = true;
@@ -1208,7 +1276,7 @@ void rightMAG (int ang, int speed) {
 
 // Adjust Vincent left given degree of adjust
 // TODO: Figure out the way to compute the degree of adjustment
-void adjustLeft(int increment) 
+void adjustLeft(float increment) 
 {	
 	// Adjust the motors speed
 	motors.setSpeeds(currentLeftSpeed, currentRightSpeed + increment);
@@ -1218,7 +1286,7 @@ void adjustLeft(int increment)
 
 // Adjust Vincent right given degree of adjust
 // TODO: Figure out the way to compute the degree of adjustment
-void adjustRight(int increment) 
+void adjustRight(float increment) 
 {
 	// Adjust the motors speed
 	motors.setSpeeds(currentLeftSpeed + increment, currentRightSpeed);
@@ -1233,12 +1301,7 @@ void stop()
 	turn = false;
 	//setSpeeds(0, 0);
 	motors.setSpeeds(0,0);
-	
-	currentLeftSpeed = 0;
-	currentRightSpeed = 0;
-	
-	delay(500);
-	
+
 	sendStopOK();
 	sendReady();
 }
@@ -1254,9 +1317,9 @@ void stop()
  * 
  */
 int x, y, z;
+static int xmax = -1024, xmin = 1024, ymax = -1024, ymin = 1024, zmax = -1024, zmin = 1024;
 
 void MAG(int* xR, int* yR, int* zR) {
-	static int xmax = -1024, xmin = 1024, ymax = -1024, ymin = 1024, zmax = -1024, zmin = 1024;
   Wire.beginTransmission(MAG_address);
   Wire.write((byte)0x01);
   Wire.endTransmission();
