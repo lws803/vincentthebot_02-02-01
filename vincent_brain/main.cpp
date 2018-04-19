@@ -20,6 +20,9 @@ using namespace std;
 #define BAUD_RATE					B9600
 
 // Defined constants to indicate directions, distance and speed
+#define DEFAULT_SPEED				110; // Default move/turn speed
+#define DEFAULT_LEFT_TURN_SPEED		110; // Default left turn speed
+#define DEFAULT_RIGHT_TURN_SPEED	110; // Default right turn speed
 #define GRID_UNIT_DISTANCE			20 // Assume grid unit distance to be wheel circumference
 // Defined constants for movement command type
 #define MOVE_COMMAND 				0 // For forward/backward
@@ -69,9 +72,6 @@ int gridSteps = 0;
 // Backtracking variables
 deque<commandTuple> backStack;
 vector<checkpointTuple> checkpointList;
-int DEFAULT_SPEED = 110; // Default move/turn speed
-int DEFAULT_LEFT_TURN_SPEED	= 110; // Default left turn speed
-int DEFAULT_RIGHT_TURN_SPEED = 110; // Default right turn speed
 // Output file for real time reading
 //ofstream outputFile;
 // Backup file to store command stack
@@ -250,7 +250,7 @@ int main()
 	
 				// Place the input request in loop for undo ability
 				do {
-					printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
+					//printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
 					printCommandList();
 					// Get the forward/backward input
 					inputCmd = executeUserCommand();
@@ -268,7 +268,7 @@ int main()
 			else {
 				// Place the input request in loop for undo ability
 				do {
-					printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
+					//printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
 					printCommandList();
 					// Get the forward/backward input
 					inputCmd = executeUserCommand();
@@ -283,7 +283,7 @@ int main()
 				
 				// Place the input request in loop for undo ability
 				do {
-					printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
+					//printInstructions(&currentHeading, &nextHeading, &gridSteps, &cmdPair);
 					printCommandList();
 					// Get the forward/backward input
 					inputCmd = executeUserCommand();
@@ -444,7 +444,7 @@ void handlePacket(TPacket *packet)
 
 void sendPacket(TPacket *packet)
 {	
-	printf("Sending packet now..\n");
+	//printf("Sending packet now..\n");
 	char buffer[PACKET_SIZE];
 	int len = serialize(buffer, packet, sizeof(TPacket));
 
@@ -478,6 +478,7 @@ void *receiveThread(void *p)
 					printf("PACKET ERROR\n");
 					handleError(result);
 				}
+				handlePacket(&packet);
 		}
 	}
 }
@@ -768,7 +769,7 @@ void pushNewCmdToStack() {
 	char ch;
 	int value;
 	
-	printf("Give a direction (f,b,l,r): ");
+	printf("Give a direction (f,b,j,l,r): ");
 	scanf("%c", &ch);
 	// Purge extraneous characters from input stream
 	flushInput();
@@ -788,7 +789,7 @@ void pushNewCmdToStack() {
 	if (ch == 'l' || ch == 'L' || ch == 'r' || ch == 'R') {
 		get<0>(tup) = TURN_COMMAND;
 	}
-	else if (ch == 'f' || ch == 'F' || ch == 'b' || ch == 'B') {
+	else if (ch == 'f' || ch == 'F' || ch == 'b' || ch == 'B' || ch == 'j' || ch == 'J' || ch == 'k' || ch == 'K') {
 		get<0>(tup) = MOVE_COMMAND;
 	}
 	get<1>(tup) = ch;
@@ -808,8 +809,12 @@ void pushCmdToFile(commandTuple *tup) {
 		stackBackup << "RIGHT ";
 	else if (get<1>(*tup) == "f" || get<1>(*tup) == "F")
 		stackBackup << "FORWARD ";
-	else
+	else if (get<1>(*tup) == "b" || get<1>(*tup) == "B")
 		stackBackup << "BACKWARD ";
+	else if (get<1>(*tup) == "j" || get<1>(*tup) == "J")
+		stackBackup << "FORWARD IR ";
+	else if (get<1>(*tup) == "k" || get<1>(*tup) == "K")
+		stackBackup << "BACKWARD IR ";
 	
 	stackBackup << get<2>(*tup);
 }
@@ -819,10 +824,12 @@ void popFromStack() {
 	char ch;
 	printf("POP the top command from stack? y/n\n");
 	scanf("%c", &ch);
+	// Purge extraneous characters from input stream
+	flushInput();
 	if (ch != 'y' && ch != 'Y') 
 		return;
 
-	printf("***URRENT STACK***\n");
+	printf("***CURRENT STACK***\n");
 	printCmdStack();
 	printf("\nNow we pop the most recent command..\n");
 	backStack.pop_back();
