@@ -13,6 +13,7 @@
 using namespace std;
 using namespace ros;
 
+#define PI 3.141592653
 
 float curr_x;
 float curr_y;
@@ -40,9 +41,10 @@ void pose_data_callback (const geometry_msgs::PoseStamped::Ptr& data) {
 
     float siny = 2.0 * (w * z);
     float cosy = 1.0 - (2.0 * z * z);
-    angle = atan2 (siny, cosy);
-    cout << angle * 180.0/3.141592653 +180.0<< endl;
+    angle = atan2 (-siny, cosy);
+    //cout << angle * 180.0/3.141592653 +180.0<< endl;
 
+    //cout << angle * 180.0/3.141592653 << endl;
 
 
     
@@ -60,30 +62,30 @@ void pose_data_callback (const geometry_msgs::PoseStamped::Ptr& data) {
             waypoints.pop();
             // Play music here to0 
             
-        }else {
+        } else {
 
             std_msgs::Float32MultiArray msg;
             vector<float> arr;
 
             // Angle
-            float siny = 2.0 * (w * z);
-            float cosy = 1.0 - (2.0 * z * z);
-            angle = atan2 (siny, cosy);
-
             // Assume already rotated 
             siny = 2.0 * (waypoints.top().pose.orientation.w * waypoints.top().pose.orientation.z);
             cosy = 1.0 - (2.0 * waypoints.top().pose.orientation.z * waypoints.top().pose.orientation.z);
-            float angle2 = atan2 (siny, cosy);
-            angle2 += 180;
-            angle2 = (int)angle2%360;
-            int delta_angle = angle2 - angle;
+            float angle2 = atan2 (-siny, cosy);
+            //angle2 += 180;
+            //angle2 = (int)angle2%360;
+            angle *= 180.0/PI;
+            angle2 *= 180.0/PI;
 
+            float delta_angle = angle2 - angle;
+
+
+            cout << delta_angle << endl;
 
             arr.push_back(delta_angle);
             arr.push_back(cartesian_count(waypoints.top().pose.position.x, waypoints.top().pose.position.y, curr_x, curr_y));
             msg.data = arr;
             a_star_marker.publish(msg); // Publish to be moved
-        
             // Set next marker 
             visualization_msgs::Marker curr_marker;
             curr_marker = waypoints.top();
