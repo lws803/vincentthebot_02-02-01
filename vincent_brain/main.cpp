@@ -245,8 +245,10 @@ int main()
 			// forward/backward
 			if (get<1>(get<0>(cmdPair)) == 0) {
 				
+				/*	Try printing the request for input so we can try using 'stop' halfway in the movement
 				while (!canPrint) {
 				}
+				*/
 	
 				// Place the input request in loop for undo ability
 				do {
@@ -544,6 +546,9 @@ commandTuple executeUserCommand() {
 	// Check if input conflicts with Arduino
 	// If Arduino is not ready and user tries to input a movement
 	// command that is not "Stop", we prevent the command from sending
+	// If it is 'stop', we allow stop command to be sent to stop Vincent
+	// This allows us to stop vincent in case something goes wrong and 
+	// the encoders cannot detect distance moved (ie wheels stucked)
 	if (!(READY_FLAG || ch == 's')) {
 		printf("Arduino is not ready! Stop Vincent first.\n\n");
 		get<0>(cmdTup) = UNDO_COMMAND;
