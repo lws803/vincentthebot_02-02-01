@@ -13,6 +13,9 @@
 #include "serial.h"
 #include "serialize.h"
 #include "constants.h"
+#include <stdarg.h>
+#include <geometry_msgs/PoseStamped.h>
+#include "ros/ros.h"
 
 
 using namespace std;
@@ -70,6 +73,12 @@ volatile bool AUTO_RECEIVE_OK = false;
 float currentHeading = 0;
 float nextHeading = 0;
 int gridSteps = 0;
+
+
+float w, z;
+float angle;
+
+
 // Backtracking variables
 deque<commandTuple> backStack;
 vector<checkpointTuple> checkpointList;
@@ -218,26 +227,7 @@ int main()
 				continue;
 			}
 		}
-		else {
-			 
- 			/*
-			TODO:	Retrieve and store checkpoint coordinates
-					Should we tie the x-coord and y-coord of each command in the stack to that command?
-					
-			getLidarCoordinates(&y-coord, &x-coord);
-			checkpointList.push_back(make_tuple(checkpointCount++, y-coord, x-coord));
-			*/
-			
-			/*
-			 * TODO:	Save the command stack in a separate text file as backup
-			 * 			in case te program crashes or exits
-			 */
-			
-			
-			
-			// Retrieve raw data from LIDAR
-			// getLidarData(&currentHeading, &nextHeading, &gridSteps);
-			// Process raw data from LIDAR
+		else {			 			
 			rawDataCommandPair cmdPair = 
 				processRawData(currentHeading, nextHeading, gridSteps);
 			commandTuple inputCmd;
@@ -841,30 +831,7 @@ void printCmdStack() {
 	}
 	
 	printf("==================================================\n\n");
-	
-	
-	/* TODO: Experimental: append screen output to another file instead
-	 * for realtime reading. Less cluttering on main terminal.
-	outputFile << "==================================================\n";
-	for (auto it = backStack.rbegin(); it != backStack.rend(); it++) {
-		if (get<1>(*it) == "f") {
-			outputFile << "FORWARD - - - || - - - " << get<2>(*it) << " CM\n";
-		}
-		else if (get<1>(*it) == "b") {
-			outputFile << "BACKWARD - - -|| - - - " << get<2>(*it) << " CM\n";
-		}
-		else if (get<1>(*it) == "l") {
-			outputFile << "LEFT - - - - -|| - - - " << get<2>(*it) << " DEGREE\n";
-		}
-		else {
-			outputFile << "RIGHT - - - - || - - - " << get<2>(*it) << " DEGREE\n";
-		}
-	}
-	
-	outputFile << "==================================================\n\n";
-	outputFile.close();
-	outputFile.open("output.txt");
-	*/
+		
 }
 
 // Process and execute command from a commandTuple object

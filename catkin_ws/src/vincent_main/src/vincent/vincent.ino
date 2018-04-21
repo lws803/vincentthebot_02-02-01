@@ -7,17 +7,6 @@
 #include "packet.h"
 #include "constants.h"
 #include "A4990MotorShield.h"
-//#include "Motors.h"
-
-// burung pepek
-/*
- * TODO:
- * 1. Convert AnalogWrite to bare metal programming (if we have time)
- * 2. Stack Nav, make sure it doesn't give bad checksum
- * 3. Calibrate with new motors
- * 4. Magnetometer XOR Ticks
- * 
- */
 
 // Motor wires
 // YELLOW to RED
@@ -35,111 +24,6 @@ typedef enum
 	FORWARD_IR=5,
 	BACKWARD_IR=6
 } TDirection;
-
-////////////////////////////////////////////////////////
-/*
-const unsigned char _MTR1DIR = 7;	// PORTD (PD7)
-const unsigned char _MTR2DIR = 8;	// PORTB (PB0)	
-const unsigned char _MTR1PWM = 9;	// PORTB (PB1)
-const unsigned char _MTR2PWM = 10;	// PORTB (PB2)
-
-volatile int currSpeed;
-
-void initMotors() {
-	// initialize pin states 
-	
-	// write to _MTR1PWM
-	PORTB &= 0b11111101;	// write low
-	DDRB |= 0b00000010;
-	PORTB &= 0b11111101;	// write low
-	
-	// write to _MTR2PWM
-	PORTB &= 0b11111011;	// write low
-	DDRB |= 0b00000100;
-	PORTB &= 0b11111011;	// write low
-	
-	// write to _MTR1DIR
-	PORTD &= 0b01111111;	// write low
-	DDRD |= 0b10000000;
-	PORTD &= 0b01111111;	// write low
-	
-	// write to _MTR2DIR
-	PORTB &= 0b11111110;	// write low
-	DDRB |= 0b00000001;
-	PORTB &= 0b11111110;	// write low
-	
-	// enable interrupts for timer1
-	TIMSK1 |= 0b110;
-	
-	#ifdef MOTOR_USE_20KHZ_PWM
-		// timer 1 configuration
-		// prescaler: clockI/O / 1
-		// outputs enabled
-		// phase-correct PWM
-		// top of 400
-		//
-		// PWM frequency calculation
-		// 16MHz / 1 (prescaler) / 2 (phase-correct) / 400 (top) = 20kHz
-		TCCR1A = 0b10100000;
-		TCCR1B = 0b00010001;
-		TCNT0 = 0;
-		ICR1 = 400; 
-	#endif
-}
-
-
-void setM1Speed(int speed) {
-	init();
-	currSpeed = speed;
-	
-	if (speed < 0) 
-		speed = -speed;
-	else if (speed > 400)
-		speed = 400;
-	
-	#ifdef	MOTOR_USE_20KHZ_PWM
-		OCR1A = speed;
-	#endif
-	
-	TCCR1A |= 0b10000001;	// sets timer 1
-	PORTB |= 0b00000010;	// write high
-	PORTD |= 0b10000000;	// write high
-	TCCR1B |= 0b00000001;	// starts timer 1
-	
-	if (speed > 255)
-		OCR1B = 255;
-	else (speed >= 0)
-		OCR1B = speed;
-}
-
-void setM2Speed(int speed) {
-	init();
-	currSpeed = speed;
-	
-	if (speed < 0) 
-		speed = -speed;
-	else if (speed > 400)
-		speed = 400;
-	
-	
-	//#ifdef	MOTOR_USE_20KHZ_PWM
-		//OCR1B = speed;//
-	//#endif//
-	
-	TCCR1A = 0b10000001;	// sets timer 1
-	PORTB &= 0b00000001;	// write low
-	PORTB &= 0b00000100;	// write low
-	TCCR1B |= 0b00000001;	// starts timer 1`
-	
-	OCR1A = speed;
-}
-
-void setSpeeds(int m1Speed, int m2Speed) {
-	setM1Speed(m1Speed);
-	setM2Speed(m2Speed);
-}
-*/
-////////////////////////////////////////////////
 
 
 volatile TDirection dir = STOP;
@@ -275,8 +159,6 @@ void enablePullups();
 void leftISR();
 void rightISR();
 void setupEINT();
-//ISR (INT0_vect);
-//ISR (INT1_vect);
 
 // Set up serial communications
 void setupSerial();
@@ -288,12 +170,6 @@ void writeSerial(const char *buffer, int len);
 void setupMotors();
 void startMotors();
 
-/*
-   void right_motor_forward(void);
-   void right_motor_reverse(void);
-   void left_motor_forward(void);
-   void left_motor_reverse(void);
- */
 
 int pwmVal(float speed);
 void forward(float dist, float speed);
@@ -335,8 +211,6 @@ void lightRed();
 void setup() {
 
 	// Setup PD4 as output pin for red led lighting
-	// DDRD |= 0b00010000;
-
 	cli();
 	setupEINT();
 	setupSerial();
@@ -422,14 +296,6 @@ void loop() {
 				newDist = 0;
 				stop();
 			}
-			/*
-			// check right and left obstacles
-			if (hasLeftObstacle()) {
-				adjustRight(NEED_ADJUST_RIGHT);
-			} else if (hasRightObstacle()) {
-				adjustLeft(NEED_ADJUST_LEFT);
-			}
-			*/
 		}
 		else if (dir == STOP) {
 			deltaDist = 0;
@@ -438,33 +304,6 @@ void loop() {
 		}
 	}
 	
-	
-	
-	/*
-	// Check when Vincent can stop turning left/right after
-	// it is given a fixed angle to turn left/right
-	if (deltaTicks > 0) {
-		if (dir == LEFT) {
-			if (rightForwardTicksTurns >= targetTicks) {
-				deltaTicks = 0;
-				targetTicks = 0;
-				stop();
-			}
-		}
-		else if (dir == RIGHT) {
-			if (leftForwardTicksTurns >= targetTicks) {
-				deltaTicks = 0;
-				targetTicks = 0;
-				stop();
-			}
-		}
-		else if (dir == STOP) {
-			deltaTicks = 0;
-			targetTicks = 0;
-			stop();
-		}
-	}*/
-
 	 // Turning with magnetometer measurement
 	 if (turn) {
 		if (dir == LEFT || dir == RIGHT) {
@@ -494,37 +333,6 @@ void loop() {
 	// Retrieve packets from RasPi and handle them
 	TPacket recvPacket; // This holds commands from the Pi
 	TResult result = readPacket(&recvPacket);
-
-	// Handle packets differently if autonomous or remote
-	// 
-	// TODO: Do we really need to handle packets this way during 
-	// autonomous mode? Is it needed?
-	/*
-	   if (isAuto) {
-	   if (result == PACKET_AUTO_OK) {
-	   handlePacket(&recvPacket);
-	   } else {
-	   if (result == PACKET_BAD) {
-	   sendBadPacket();
-	   } else {
-	   if (result == PACKET_CHECKSUM_BAD)
-	   sendBadChecksum();
-	   }
-	   }
-
-	   } else {
-	   if(result == PACKET_OK)
-	   handlePacket(&recvPacket);
-	   else
-	   if(result == PACKET_BAD)
-	   {
-	   sendBadPacket();
-	   }
-	   else
-	   if(result == PACKET_CHECKSUM_BAD)
-	   sendBadChecksum();
-	   }
-	 */
 
 	if(result == PACKET_OK) {
 		handlePacket(&recvPacket);
@@ -726,22 +534,12 @@ void handleCommand(TPacket *command)
 			break;	
 		case COMMAND_TURN_LEFT:
 			sendOK();
-			//left((float) command->params[0], (float) command->params[1]);
 			leftMAG(((float) command->params[0]), ((float) command->params[1]));
 			break;
 		case COMMAND_TURN_RIGHT:
 			sendOK();
-			//right((float) command->params[0], (float) command->params[1]);
 			rightMAG((float) command->params[0], (float) command->params[1]);
 			break;
-		/*case COMMAND_ADJUST_LEFT:
-			sendOK();
-			adjustLeft((float) command->params[0]);
-			break;
-		case COMMAND_ADJUST_RIGHT:
-			sendOK();
-			adjustRight((float) command->params[0]);
-			break;*/
 		case COMMAND_STOP:
 			sendOK();
 			stop();
@@ -865,12 +663,8 @@ void leftISR()
 		reverseDist = (unsigned long) ((float) leftReverseTicks / COUNTS_PER_REV_LEFT * WHEEL_CIRC);
 	}
 	else if (dir == RIGHT) {
-		//rightReverseTicksTurns++;
 		leftForwardTicksTurns++;
 	}
-	//sendMessage("left\n");
-	//Serial.print("DIST: ");
-	//Serial.println(forwardDist);
 }
 
 void rightISR()
@@ -882,13 +676,8 @@ void rightISR()
 		rightReverseTicks++;
 		reverseDist = (unsigned long) ((float) rightReverseTicks / COUNTS_PER_REV_RIGHT * WHEEL_CIRC);
 	} else if (dir == LEFT) {
-		//rightReverseTicksTurns++;
 		rightForwardTicksTurns++;
 	}  
-
-	//Serial.print("RIGHT: ");
-	//Serial.println((double)rightTicks/COUNTS_PER_REV * WHEEL_CIRC);
-
 }
 
 // Set up the external interrupt pins INT0 and INT1
@@ -906,10 +695,6 @@ void setupEINT()
 // TODO: Implement adjustments during interrupts
 ISR (INT0_vect) {
 	leftISR();
-
-	// Check for adjustments
-	//if (getAdjustReadings() == NEED_ADJUST_LEFT) adjustLeft(100);
-	//else adjustRight(100);
 }
 
 ISR (INT1_vect) {
@@ -977,22 +762,6 @@ void writeSerial(const char *buffer, int len)
  * 
  */
 
-// Set up Vincent's motors. Right now this is empty, but
-// later you will replace it with code to set up the PWMs
-// to drive the motors.
-void setupMotors()
-{
-	/* Our motor set up is:  
-	 *    A1IN - Pin 5, PD5, OC0B
-	 *    A2IN - Pin 6, PD6, OC0A
-	 *    B1IN - Pin 10, PB2, OC1B	
-	 *    B2In - Pin 11, PB3, OC2A
-	 */
-	 
-	 // 
-
-}
-
 // Start the PWM for Vincent's motors.
 // We will implement this later. For now it is
 // blank.
@@ -1002,32 +771,6 @@ void startMotors(){
 	TCCR0B = 0b0000011;	// 64 prescalar value
 	TCCR2B = 0b0000100;	// 64 prescalar value
 }
-
-
-// Specific ports need to be verified in this part
-
-/*
-   void right_motor_forward(void) {
-   TCCR0A = 0b10000001;
-   PORTD &= 0b11011111;
-   }
-
-   void right_motor_reverse(void) {
-   TCCR0A = 0b00100001;
-   PORTD &= 0b10111111;
-   }
-
-   void left_motor_forward(void) {
-   TCCR2A = 0b10000001;
-   PORTD &= 0b11011111;
-   }
-
-   void left_motor_reverse(void) {
-   TCCR2A = 0b00100001;
-   PORTD &= 0b11011111;
-   }
- */
-
 
 // Convert percentages to PWM values
 int pwmVal(float speed) 
@@ -1058,9 +801,6 @@ void forward(float dist, float speed)
 	// it is now moving
 	sendMoveOK();
 
-	//int leftVal = pwmVal(speed);
-	//int rightVal = leftVal + WHEEL_DIFF_FOR;
-
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
 	else deltaDist = 9999999;
@@ -1071,13 +811,7 @@ void forward(float dist, float speed)
 	// RF = Right forward pin, RR = Right reverse pin
 	// This will be replaced later with bare-metal code.
 	
-	/*
-	analogWrite(LF, leftVal);
-	analogWrite(RF, rightVal);
-	analogWrite(LR,0, 0);*/
-	
 	motors.setSpeeds(speed - MOTOR_CONST_LEFT, speed - MOTOR_CONST_RIGHT);
-	//motors.setSpeeds(speed - MOTOR_CONST_LEFT, speed - MOTOR_CONST_RIGHT);
 }
 
 void forwardIR(int dist, int speed) 
@@ -1120,31 +854,17 @@ void reverse(float dist, float speed)
 	sendMoveOK();
 	
 	
-	//int rightVal = pwmVal(speed);
-	//int leftVal = rightVal - WHEEL_DIFF_BAC;
-	
-	
-	//int leftVal = pwmVal(speed);
-	//int rightVal = leftVal + WHEEL_DIFF_BAC;
-
 	// Compute the new total distance given the input
 	if (dist > 0) deltaDist = dist;
 	else deltaDist = 9999999;
 	newDist = reverseDist + deltaDist;
 
-	//setSpeeds(-speed + MOTOR_CONST_LEFT, -speed + MOTOR_CONST_RIGHT);
 	motors.setSpeeds(-speed + MOTOR_CONST_LEFT, -speed + MOTOR_CONST_RIGHT);
 	
 	
 	// LF = Left forward pin, LR = Left reverse pin
 	// RF = Right forward pin, RR = Right reverse pin
 	// This will be replaced later with bare-metal code.
-	
-	/*analogWrite(LR, leftVal);
-	analogWrite(RR, leftVal);
-	analogWrite(LF, 0);
-	analogWrite(RF, 0);
-	*/
 	
 }
 
@@ -1193,15 +913,6 @@ void left(float ang, float speed)
 	// Set the direction of travel
 	dir = LEFT;
 
-	/*
-	 * int rightVal = pwmVal(speed);
-	 int leftVal = rightVal - WHEEL_DIFF_FOR;
-	 * 
-	 */
-
-	//int leftVal = pwmVal(speed);
-	//int rightVal = leftVal + WHEEL_DIFF_FOR;  
-
 	// it is now moving
 	sendMoveOK();
 
@@ -1210,17 +921,8 @@ void left(float ang, float speed)
 	else deltaTicks=computeDeltaTicks(ang); 
 	targetTicks = rightForwardTicksTurns + deltaTicks;
 
-	// To turn left we reverse the left wheel and move
-	// the right wheel forward.
-	//analogWrite(LR, 0);
-	//analogWrite(RF, rightVal);
-	//analogWrite(LF, 0);
-	//analogWrite(RR, 0);
-	
 	// left motor does nothing, right motor moves
-	//setSpeeds(0, speed);
 	motors.setSpeeds(-speed, speed);  // spot turn
-	//motors.setSpeeds(0, speed);
 }
 
 // Turn Vincent right "ang" degrees at speed "speed".
@@ -1233,9 +935,6 @@ void right(float ang, float speed)
 	// Set the direction of travel
 	dir = RIGHT;
 
-	//int leftVal = pwmVal(speed);
-	//int rightVal = leftVal + WHEEL_DIFF_FOR;
-
 	// it is now moving
 	sendMoveOK();
 
@@ -1244,15 +943,6 @@ void right(float ang, float speed)
 	else deltaTicks=computeDeltaTicks(ang); 
 	targetTicks = leftForwardTicksTurns + deltaTicks;
 
-	// To turn right we reverse the right wheel and move
-	// the left wheel forward.
-	//analogWrite(RR, 0);
-	//analogWrite(LF, leftVal);
-	//analogWrite(LR, 0);
-	//analogWrite(RF, 0);
-	
-	//setSpeeds(speed, 0);
-	//motors.setSpeeds(speed, 0); spot turn
 	motors.setSpeeds(speed, -speed);
 }
 
@@ -1317,9 +1007,7 @@ void stop()
 
 /* End of vincent motor code
  *
- */
-
-
+*/
 
 /*
  * Vincent's setup and run codes
