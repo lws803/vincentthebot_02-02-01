@@ -22,6 +22,7 @@ float angle;
 int mode = 0;
 Publisher marker_pub;
 Publisher a_star_marker;
+Publisher light_marker; 
 
 
 stack<visualization_msgs::Marker> waypoints;
@@ -60,8 +61,9 @@ void pose_data_callback (const geometry_msgs::PoseStamped::Ptr& data) {
             }
 
             waypoints.pop();
-            // Play music here to0 
-            
+            std_msgs::Int32 mymsg; 
+            mymsg.data = 0;
+            light_marker.publish (mymsg); 
         } else {
 
             std_msgs::Float32MultiArray msg;
@@ -172,6 +174,8 @@ int main (int argc, char **argv) {
     Subscriber sub3 = n.subscribe("/slam_out_pose", 1, pose_data_callback); // This will update global map metadata
     marker_pub = n.advertise<visualization_msgs::Marker> ("markers", 1);
     a_star_marker = n.advertise<std_msgs::Float32MultiArray> ("markers_a_star", 1);
+    light_marker = n.advertise<std_msgs::Int32> ("light_cue", 1);
+
     Subscriber cue_sub = n.subscribe ("/cue_marker", 1, cue_callback);
     Subscriber pop_sub = n.subscribe ("/pop_markers", 1, cue_pop_callback);
     // Add a different marker namespace  
