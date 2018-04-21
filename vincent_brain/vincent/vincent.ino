@@ -727,7 +727,7 @@ void handleCommand(TPacket *command)
 		case COMMAND_TURN_LEFT:
 			sendOK();
 			//left((float) command->params[0], (float) command->params[1]);
-			leftMAG((float) command->params[0], (float) command->params[1]);
+			leftMAG(((float) command->params[0]), ((float) command->params[1]));
 			break;
 		case COMMAND_TURN_RIGHT:
 			sendOK();
@@ -923,44 +923,53 @@ ISR (INT1_vect) {
 // Set up the serial connection. For now we are using 
 // Arduino Wiring, you will replace this later
 // with bare-metal code.
-void setupSerial()
+
+void setBaud(unsigned long baudRate)
 {
-	// To replace later with bare-metal.
-	Serial.begin(9600);
+    unsigned int b;
+    b = (unsigned int) round(F_CPU / (16.0 * baudRate))- 1; // round up/ down because its an integer    
+    UBRR0H = (unsigned char) (b >> 8);
+    UBRR0L = (unsigned char) b;
 }
 
-// Start the serial connection. For now we are using
-// Arduino wiring and this function is empty. We will
-// replace this later with bare-metal code.
+void setupSerial()
+{
+    cli();
+    UCSR0A = 0;
+    UCSR0C = 0b00000110;  
+}
 
 void startSerial()
 {
-	// Empty for now. To be replaced with bare-metal code
-	// later on.
-
+    setBaud (9600);
+    UCSR0B = 0b00011000; // Disable receive and transmit complete interrupts
+    sei();
 }
 
 // Read the serial port. Returns the read character in
 // ch if available. Also returns TRUE if ch is valid. 
 // This will be replaced later with bare-metal code.
+char dataRecv; 
 
 int readSerial(char *buffer)
 {
 
 	int count=0;
+    while ((UCSR0A & 0b10000000) == 0); 
+        buffer[count++] = UDR0;
 
-	while(Serial.available())
-		buffer[count++] = Serial.read();
 
 	return count;
 }
 
-// Write to the serial port. Replaced later with
-// bare-metal code
 
 void writeSerial(const char *buffer, int len)
 {
-	Serial.write((const uint8_t*) (buffer), len);
+    int i = 0;
+    while(i++ < len) {
+        while ((UCSR0A & 0b00100000) == 0); 
+        UDR0 = buffer[i];   
+    }
 }
 
 /*
